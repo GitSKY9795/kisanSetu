@@ -3,6 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import { getCurrentPrice, getPriceHistory, getMultiHorizonForecast } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useGeolocation } from "../hooks/useGeolocation.js";
 
 const CROPS = [
   { value: "wheat", label: "Wheat (गेहूँ)" },
@@ -18,6 +20,8 @@ export default function PriceTrends() {
   const { crop: cropParam } = useParams();
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { profile } = useAuth();
+  const geo = useGeolocation();
   const crop = cropParam || "wheat";
 
   const [records, setRecords] = useState([]);
@@ -25,29 +29,57 @@ export default function PriceTrends() {
   const [forecastHorizon, setForecastHorizon] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [district, setDistrict] = useState("");
+
+  // Once we know the user's real district (their profile, or live geolocation), use it
+  // as the default — but don't stomp on a district they've already typed in themselves.
+  useEffect(() => {
+    if (district) return;
+    const detected = profile?.district || geo.district;
+    if (detected) setDistrict(detected);
+  }, [profile?.district, geo.district, district]);
+
+  const state = profile?.state || geo.state;
 
   useEffect(() => {
+    // District starts empty and gets filled in a moment (profile/geolocation), which
+    // fires this effect twice in quick succession. An earlier, param-less request can
+    // resolve *after* the later, correctly-scoped one (real network calls, variable
+    // latency) and clobber it with stale data — `current` guards against that.
+    let isActive = true;
     setLoading(true);
     setError(null);
+    const params = district ? { district, state } : {};
     Promise.all([
-      getPriceHistory(crop),
-      getCurrentPrice(crop),
+      getPriceHistory(crop, params),
+      getCurrentPrice(crop, params),
       getMultiHorizonForecast(crop),
     ])
       .then(([history, curr, horizon]) => {
+        if (!isActive) return;
         setRecords(history.records || []);
         setCurrent(curr);
         setForecastHorizon(horizon);
       })
-      .catch(() => setError(t("common.backendError")))
-      .finally(() => setLoading(false));
-  }, [crop]);
+      .catch(() => {
+        if (isActive) setError(t("common.backendError"));
+      })
+      .finally(() => {
+        if (isActive) setLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [crop, district, state]);
 
   const chartData = [...records]
     .reverse()
     .map((r) => ({ date: r.arrival_date, price: Number(r.modal_price) }));
 
   const trendUp = current && current.predicted_price_per_quintal_7d >= current.current_price_per_quintal;
+  const trendPct = current && current.current_price_per_quintal
+    ? (((current.predicted_price_per_quintal_7d - current.current_price_per_quintal) / current.current_price_per_quintal) * 100).toFixed(1)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -75,6 +107,15 @@ export default function PriceTrends() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">District</label>
+            <input
+              value={district}
+              onChange={(e) => setDistrict(e.target.value)}
+              placeholder={geo.loading ? "Detecting your location…" : "e.g. Ujjain"}
+              className="border border-gray-300 rounded-xl px-3 py-2 bg-gray-50 text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 w-40"
+            />
+          </div>
         </div>
       </div>
 
@@ -101,7 +142,7 @@ export default function PriceTrends() {
             <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">{t("prices.forecast")} (7 Days)</div>
             <div className={`text-3xl font-black mt-1 ${trendUp ? "text-emerald-700" : "text-rose-600"}`}>
               ₹{current.predicted_price_per_quintal_7d?.toLocaleString("en-IN")}
-              <span className="text-lg ml-1 font-bold">{trendUp ? "↑ (+2.8%)" : "↓ (-1.5%)"}</span>
+              <span className="text-lg ml-1 font-bold">{trendUp ? `↑ (+${trendPct}%)` : `↓ (${trendPct}%)`}</span>
             </div>
             <div className="text-xs text-gray-500 mt-1">
               ₹{(current.predicted_price_per_quintal_7d / 100).toFixed(2)} / kg (Prophet ML Model)

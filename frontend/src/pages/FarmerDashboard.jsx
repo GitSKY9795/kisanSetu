@@ -6,6 +6,7 @@ import { getDecision, getCurrentPrice, getNearbyMandis, listMarketplaceOffers, a
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAssistant } from "../context/AssistantContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useGeolocation } from "../hooks/useGeolocation.js";
 
 const CROPS = [
   { value: "Wheat", label: "Wheat (गेहूँ)" },
@@ -21,6 +22,7 @@ export default function FarmerDashboard() {
   const { t } = useLanguage();
   const { openAssistant } = useAssistant();
   const { profile } = useAuth();
+  const geo = useGeolocation();
 
   const [activeTab, setActiveTab] = useState("decision"); // "decision" | "arbitrage" | "quality" | "listings" | "offers"
 
@@ -31,6 +33,15 @@ export default function FarmerDashboard() {
     harvest_date: "Ready for Harvest (3 days)",
     storage_capacity_kg: 600,
   });
+  const [districtTouched, setDistrictTouched] = useState(false);
+
+  // Default the evaluation district to the farmer's real location (profile, then live
+  // geolocation) once known — never override a district they've typed themselves.
+  useEffect(() => {
+    if (districtTouched) return;
+    const detected = profile?.district || geo.district;
+    if (detected) setForm((f) => ({ ...f, district: detected }));
+  }, [profile?.district, geo.district, districtTouched]);
 
   const [decision, setDecision] = useState(null);
   const [currentPriceInfo, setCurrentPriceInfo] = useState(null);
@@ -50,7 +61,10 @@ export default function FarmerDashboard() {
   const [creatingListing, setCreatingListing] = useState(false);
   const [listingError, setListingError] = useState(null);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    if (e.target.name === "district") setDistrictTouched(true);
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
 
   const loadOffers = () => {
     listMarketplaceOffers()

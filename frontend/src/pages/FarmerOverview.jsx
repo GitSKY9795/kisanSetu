@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getCurrentPrice } from "../api/client.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useGeolocation } from "../hooks/useGeolocation.js";
 
 const cropSeeds = [
   { name: "Wheat", icon: "🌾", mandi: "Nearby Mandi", tone: "green", movement: [42, 44, 43, 47, 49, 52, 55] },
@@ -18,16 +19,29 @@ const recentActivity = [
 
 export default function FarmerOverview() {
   const { profile } = useAuth();
+  const geo = useGeolocation();
   const [selectedCrop, setSelectedCrop] = useState("Wheat");
   const [prices, setPrices] = useState({});
+  const effectiveDistrict = profile?.district || geo.district || "Ujjain";
+  const effectiveState = profile?.state || geo.state;
 
   useEffect(() => {
+    // effectiveDistrict starts at the "Ujjain" fallback and gets replaced once the
+    // profile/geolocation resolves, firing this effect twice — an in-flight request for
+    // the earlier district can resolve after the later one and clobber it, so requests
+    // from a stale run are dropped instead of applied.
+    let isActive = true;
     cropSeeds.forEach((crop) => {
-      getCurrentPrice(crop.name, { district: profile?.district || "Ujjain" })
-        .then((data) => setPrices((current) => ({ ...current, [crop.name]: data })))
+      getCurrentPrice(crop.name, { district: effectiveDistrict, state: effectiveState })
+        .then((data) => {
+          if (isActive) setPrices((current) => ({ ...current, [crop.name]: data }));
+        })
         .catch(() => {});
     });
-  }, [profile?.district]);
+    return () => {
+      isActive = false;
+    };
+  }, [effectiveDistrict, effectiveState]);
 
   const displayFarmer = profile || {
     name: "Farmer profile",
@@ -100,6 +114,7 @@ function ProfileField({ label, value }) { return <div className="profile-field">
 function QuickAction({ icon, label, to, tone }) { return <Link to={to} className={`quick-action ${tone}`}><span>{icon}</span><strong>{label}</strong><b aria-hidden="true">↗</b></Link>; }
 function CropCard({ crop, price, active, onClick }) {
   const current = price?.current_price_per_quintal;
-  const change = price?.change_percent;
-  return <button type="button" className={`crop-card ${crop.tone} ${active ? "active" : ""}`} onClick={onClick}><div className="crop-card-top"><span className="crop-icon">{crop.icon}</span><span className="trend-arrow">{change >= 0 ? "↗" : "↘"}</span></div><h3>{crop.name}</h3><strong>{current ? `₹${Number(current).toLocaleString("en-IN")}` : "Awaiting feed"}</strong><small>{current ? "/ Quintal" : "Live price placeholder"}</small><p className={change >= 0 ? "positive" : "neutral"}>{change ? `${change > 0 ? "↑" : "↓"} ${Math.abs(change)}% today` : "Trend data pending"}</p><em>Mandi: {price?.mandi_name || crop.mandi}</em></button>;
+  const predicted7d = price?.predicted_price_per_quintal_7d;
+  const change = current && predicted7d ? Number((((predicted7d - current) / current) * 100).toFixed(1)) : undefined;
+  return <button type="button" className={`crop-card ${crop.tone} ${active ? "active" : ""}`} onClick={onClick}><div className="crop-card-top"><span className="crop-icon">{crop.icon}</span><span className="trend-arrow">{change >= 0 ? "↗" : "↘"}</span></div><h3>{crop.name}</h3><strong>{current ? `₹${Number(current).toLocaleString("en-IN")}` : "Awaiting feed"}</strong><small>{current ? "/ Quintal" : "Live price placeholder"}</small><p className={change >= 0 ? "positive" : "neutral"}>{change ? `${change > 0 ? "↑" : "↓"} ${Math.abs(change)}% today` : "Trend data pending"}</p><em>Mandi: {price?.market || crop.mandi}</em></button>;
 }

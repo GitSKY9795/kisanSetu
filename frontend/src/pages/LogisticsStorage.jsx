@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { listWarehouses, calculatePledgeLoan, calculateTransport } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useGeolocation } from "../hooks/useGeolocation.js";
 
 export default function LogisticsStorage() {
   const { t } = useLanguage();
+  const { profile } = useAuth();
+  const geo = useGeolocation();
   const [activeTab, setActiveTab] = useState("warehouses"); // "warehouses" | "pledge" | "freight"
   const [warehouses, setWarehouses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,6 +32,15 @@ export default function LogisticsStorage() {
   });
   const [freightResult, setFreightResult] = useState(null);
   const [calculatingFreight, setCalculatingFreight] = useState(false);
+  const [originTouched, setOriginTouched] = useState(false);
+
+  // Default the freight origin to the farmer's real district (profile, then live
+  // geolocation) once known — but never override a value they've already edited.
+  useEffect(() => {
+    if (originTouched) return;
+    const detected = profile?.district || geo.district;
+    if (detected) setFreightForm((f) => ({ ...f, origin_district: detected }));
+  }, [profile?.district, geo.district, originTouched]);
 
   useEffect(() => {
     setLoading(true);
@@ -351,7 +364,10 @@ export default function LogisticsStorage() {
                 <input
                   type="text"
                   value={freightForm.origin_district}
-                  onChange={(e) => setFreightForm({ ...freightForm, origin_district: e.target.value })}
+                  onChange={(e) => {
+                    setOriginTouched(true);
+                    setFreightForm({ ...freightForm, origin_district: e.target.value });
+                  }}
                   className="w-full border rounded-xl p-2.5"
                 />
               </div>
