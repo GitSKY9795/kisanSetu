@@ -29,7 +29,9 @@ def _build_agent():
     if not HAS_LANGCHAIN or not settings.GEMINI_API_KEY:
         return None
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=settings.GEMINI_API_KEY)
+        # gemini-1.5-flash was retired by Google; gemini-3.6-flash confirmed working
+        # against the live API as of 2026-09.
+        llm = ChatGoogleGenerativeAI(model="gemini-3.6-flash", api_key=settings.GEMINI_API_KEY)
         return create_react_agent(llm, AGENT_TOOLS)
     except Exception:
         return None
@@ -45,6 +47,19 @@ def get_agent():
     return _agent
 
 
+def _extract_text(content) -> str:
+    """Newer langchain-google-genai versions return message content as a list of
+    typed blocks (e.g. [{"type": "text", "text": "...", "extras": {...}}]) instead of
+    a plain string — pull just the text back out either way."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return str(content)
+
+
 def run_agent_query(query_en: str, crop_name: str = "wheat", quantity_kg: float = 500.0, district: str = "Central") -> dict:
     """Executes the farmer query using Gemini agent or structured deterministic tool execution."""
     agent = get_agent()
@@ -57,11 +72,11 @@ def run_agent_query(query_en: str, crop_name: str = "wheat", quantity_kg: float 
             final_message = result["messages"][-1]
             return {
                 "query": query_en,
-                "response": final_message.content,
-                "engine": "Gemini-1.5-Flash (LangGraph)",
+                "response": _extract_text(final_message.content),
+                "engine": "Gemini (LangGraph)",
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[KisanSetu] Gemini agent call failed, falling back to rule-based engine: {exc!r}")
 
     # Deterministic Agent Execution Trace (when API key is not present or offline)
     decision = recommend_action(

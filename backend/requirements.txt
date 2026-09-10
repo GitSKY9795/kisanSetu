@@ -36,13 +36,18 @@ shap==0.46.0
 # ultralytics==8.3.0
 
 # --- Agentic AI ---
-# NOTE: langgraph==0.2.34 bundles its own `langgraph.prebuilt` submodule (used by
-# app/agents/orchestrator.py) — do NOT add a separate `langgraph-prebuilt` package
-# here, it resolves to a much newer release that requires langchain-core>=1.0 and
-# will break this exact pin combination.
+# NOTE: current Gemini models (2.5+/3.x) require "thought_signature" support in
+# function-calling turns that langchain-google-genai==2.0.1 doesn't implement — every
+# tool-calling request fails with "Function call is missing a thought_signature" and
+# silently falls back to the rule-based engine. langchain-google-genai>=4 fixes this,
+# which pulls in langchain-core>=1.0. pip's resolver will warn that langgraph==0.2.34
+# wants langchain-core<0.4 — that warning is stale/overly conservative: this exact
+# combination (langgraph 0.2.34 + langchain-core 1.6.2 + langchain-google-genai 4.4.0)
+# is verified working end-to-end against the live Gemini API as of 2026-09. Do NOT add
+# a separate `langgraph-prebuilt` package — 0.2.34 bundles its own.
 langgraph==0.2.34
-langchain-core==0.3.10
-langchain-google-genai==2.0.1
+langchain-core==1.6.2
+langchain-google-genai==4.4.0
 google-generativeai==0.8.2
 
 # --- Background jobs (optional — not required to run the current MVP; no Celery
