@@ -1,0 +1,62 @@
+# --- Web framework ---
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+websockets==13.1
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# --- Database ---
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+alembic==1.13.3
+geoalchemy2==0.15.2      # PostGIS support
+redis==5.0.8
+
+# --- Auth ---
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+supabase==2.7.4           # optional: only needed if you wire up Supabase auth/storage instead of local JWT + SQLite
+
+# --- AI / ML ---
+pandas==2.2.3
+numpy==1.26.4
+cmdstanpy<1.3.0            # pin required for compatibility with prophet==1.1.6
+prophet==1.1.6
+xgboost==2.1.1
+scikit-learn==1.5.2
+shap==0.46.0
+
+# --- Computer vision (crop quality grading) ---
+# NOTE: quality_grading.py currently SIMULATES YOLOv8 inference (no image model is
+# actually loaded), so ultralytics/torch are NOT required to run this prototype.
+# Uncomment below only if you wire up a real YOLOv8 model — it pulls in PyTorch
+# (multi-GB download) so it's kept optional to keep first-time setup fast.
+# ultralytics==8.3.0
+
+# --- Agentic AI ---
+# NOTE: langgraph==0.2.34 bundles its own `langgraph.prebuilt` submodule (used by
+# app/agents/orchestrator.py) — do NOT add a separate `langgraph-prebuilt` package
+# here, it resolves to a much newer release that requires langchain-core>=1.0 and
+# will break this exact pin combination.
+langgraph==0.2.34
+langchain-core==0.3.10
+langchain-google-genai==2.0.1
+google-generativeai==0.8.2
+
+# --- Background jobs (optional — not required to run the current MVP; no Celery
+# tasks are wired up yet, all services run synchronously) ---
+celery==5.4.0
+
+# --- HTTP clients for external APIs (Agmarknet, e-NAM, Open-Meteo, OpenRouteService, BHASHINI) ---
+httpx==0.27.2
+requests==2.32.3
+
+# --- Payments (optional — routes_transactions.py works without this; only needed
+# if you wire up real Razorpay test-mode checkout) ---
+razorpay==1.4.2
+
+# --- Dev / test ---
+pytest==8.3.3
+pytest-asyncio==0.24.0
+python-dotenv==1.0.1
