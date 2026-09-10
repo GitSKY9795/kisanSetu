@@ -19,19 +19,28 @@ const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 export const auth = getAuth(app);
 
-export function getFirebaseOtpError(error) {
-  const messages = {
-    "auth/invalid-phone-number": "Enter a valid Indian mobile number.",
-    "auth/operation-not-allowed": "Phone sign-in is not enabled in Firebase Authentication.",
-    "auth/unauthorized-domain": "This website is not authorized in Firebase Authentication.",
-    "auth/invalid-app-credential": "The reCAPTCHA check failed. Please try again.",
-    "auth/too-many-requests": "Too many attempts. Please try again later.",
-    "auth/quota-exceeded": "OTP limit reached. Please try again later.",
-    "auth/captcha-check-failed": "Security check failed. Please try again.",
-    "auth/network-request-failed": "Network error. Check your internet connection and try again.",
-    "auth/invalid-verification-code": "Incorrect OTP. Please try again.",
-    "auth/code-expired": "This OTP has expired. Please request a new OTP.",
-    "auth/session-expired": "This OTP session has expired. Please request a new OTP.",
-  };
-  return messages[error?.code] || "Could not complete phone authentication. Please try again.";
+const AUTH_ERROR_MESSAGES = {
+  // Email link (verification)
+  "auth/invalid-email": "Enter a valid email address.",
+  "auth/missing-email": "Enter your email address.",
+  "auth/invalid-action-code": "This verification link is invalid or has already been used.",
+  "auth/expired-action-code": "This verification link has expired. Request a new one.",
+  "auth/user-disabled": "This account has been disabled.",
+  // Password linking / set-password
+  "auth/email-already-in-use": "An account with this email already exists — try logging in instead.",
+  "auth/credential-already-in-use": "This email is already linked to another account.",
+  "auth/weak-password": "Choose a stronger password (at least 6 characters).",
+  "auth/requires-recent-login": "This took too long — please verify your email again.",
+  // Login (email + password)
+  "auth/wrong-password": "Incorrect email or password.",
+  "auth/user-not-found": "No account found with that email.",
+  "auth/invalid-credential": "Incorrect email or password.",
+  // Shared
+  "auth/too-many-requests": "Too many attempts. Please try again later.",
+  "auth/network-request-failed": "Network error. Check your internet connection and try again.",
+  "auth/unauthorized-domain": "This website is not authorized in Firebase Authentication.",
+};
+
+export function getFirebaseAuthError(error) {
+  return AUTH_ERROR_MESSAGES[error?.code] || "Something went wrong. Please try again.";
 }

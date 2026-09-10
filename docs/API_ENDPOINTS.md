@@ -11,7 +11,8 @@ to have finished registration as that role; others accept any authenticated role
 | Method | Endpoint | Description | Auth |
 |---|---|---|---|
 | GET | `/health` | Liveness check | none |
-| GET | `/auth/me` | Resolve identity: role + linked profile (null role/profile before registration) | any signed-in user |
+| GET | `/auth/me` | Resolve identity: username/email + role + linked profile (null role/profile before registration) | any signed-in user |
+| POST | `/auth/username` | Set the account's username — called once, right after linking a password to the verified email | any signed-in user, username not yet set |
 | POST | `/auth/register/farmer` | Complete registration as a Farmer, creates the Farmer profile | any signed-in user, unregistered |
 | POST | `/auth/register/buyer` | Complete registration as a Buyer | any signed-in user, unregistered |
 | POST | `/auth/register/fpo` | Complete registration as an FPO | any signed-in user, unregistered |

@@ -43,7 +43,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram a
 | **AI/ML** | Pandas, NumPy, Prophet, XGBoost, Scikit-learn, YOLOv8, SHAP |
 | **Agentic AI** | LangGraph + Gemini API (tool-calling orchestrator), **BHASHINI** (voice/ASR/NMT/TTS) |
 | **Data / External APIs** | AGMARKNET (data.gov.in), e-NAM, Open-Meteo, OpenRouteService |
-| **Auth** | Firebase Authentication (phone OTP) — sole identity provider for every role (Farmer/Buyer/FPO/Admin); backend verifies ID tokens via `firebase-admin` |
+| **Auth** | Firebase Authentication (email link verification + password) — sole identity provider for every role (Farmer/Buyer/FPO/Admin); backend verifies ID tokens via `firebase-admin` |
 | **Payments** | Razorpay (test mode) |
 | **Deployment** | GitHub Actions (CI/CD), Vercel (frontend), Render/Railway (backend), Firebase (Auth) |
 
@@ -98,11 +98,13 @@ cp backend/.env.example backend/.env                 # fill in optional keys lat
 3. `backend/.env.example` already has `GOOGLE_APPLICATION_CREDENTIALS=./firebase-adminsdk.json`
    pointing at that exact filename, so `cp backend/.env.example backend/.env` just works once
    the key file is in place.
-4. To log in during local dev without sending real SMS, add a **test phone number** in
-   Firebase Console → Authentication → Sign-in method → Phone → "Phone numbers for testing"
-   (e.g. `+91 9999999999` / code `123456`).
-5. Admin accounts are seeded, not self-service: sign in once through the app as any role,
-   then run `python -m scripts.promote_admin --phone <phone>` (see 5.3) to flip that account to ADMIN.
+4. Auth is email-based: Register → verify email (Firebase sends a real sign-in link,
+   click it to continue) → set a username + password → choose a role → fill role
+   details. Subsequent logins use that email + password. No SMS, no phone quota, no
+   Blaze plan required — Email Link sign-in is free on the Spark plan.
+5. Admin accounts are seeded, not self-service: sign in once through the app (verify
+   email + set a password is enough — no role details needed), then run
+   `python -m scripts.promote_admin --email <email>` (see 5.3) to flip that account to ADMIN.
 
 ### 5.2 macOS system dependency: libomp (required by XGBoost)
 ```bash
@@ -184,8 +186,9 @@ See [`mobile/README.md`](mobile/README.md) — optional, not required to explore
 | Training `train_price_model.py` fails / very slow | Make sure `cmdstanpy.install_cmdstan()` finished successfully first (5.3). First fit per crop is slower; subsequent ones are faster. |
 | Frontend pages show "Could not reach the KisanSetu backend" | Make sure `uvicorn` is running on port 8000 in another terminal, and `frontend/.env` has `VITE_API_BASE_URL=http://localhost:8000` |
 | `sqlite3.OperationalError` on a fresh clone | Delete `backend/kisansetu.db` if present and re-run `python -m scripts.seed_data` — SQLite will recreate all tables automatically on first import of `app.core.database` |
-| Login/register calls return `503 Firebase Admin credentials are not configured` | `GOOGLE_APPLICATION_CREDENTIALS` in `backend/.env` isn't pointing at a real key file — redo step 5.1 |
-| OTP never arrives | Real SMS needs a real phone + Firebase's phone-auth billing quota; for local dev, add a Firebase test phone number instead (5.1, step 4) |
+| Every authenticated request returns `401 Invalid or expired token` | `GOOGLE_APPLICATION_CREDENTIALS` in `backend/.env` isn't pointing at a real key file, or `FIREBASE_PROJECT_ID` doesn't match — redo step 5.1 |
+| Verification email never arrives | Check spam; Firebase's default email-link rate limit is generous but not instant — wait a minute and try again. This is free on Spark, no billing needed (unlike phone/SMS auth) |
+| Register.jsx shows "An account with this email already exists" right after clicking the emailed link | You already finished registration with that email before — go to `/login` instead |
 
 ## 7. Team & Ownership
 

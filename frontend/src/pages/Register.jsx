@@ -1,11 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
+import {
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+  EmailAuthProvider,
+  linkWithCredential,
+  updatePassword,
+  updateProfile,
+} from "firebase/auth";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_HOME } from "../components/ProtectedRoute.jsx";
-import { auth, getFirebaseOtpError } from "../firebase.js";
-import { registerBuyer, registerFarmer, registerFpo } from "../api/client.js";
+import { auth, getFirebaseAuthError } from "../firebase.js";
+import { registerBuyer, registerFarmer, registerFpo, setUsername as apiSetUsername } from "../api/client.js";
+
+const EMAIL_FOR_SIGNIN_KEY = "kisansetu_email_for_signin";
 
 const ROLES = [
   { value: "FARMER", label: "Farmer", icon: "👨‍🌾", blurb: "Sell your produce, track mandi prices, join FPO pools." },
@@ -14,10 +24,13 @@ const ROLES = [
 ];
 
 const initialForm = {
-  name: "",
-  mobile: "",
-  otp: "",
+  email: "",
+  username: "",
+  password: "",
+  confirmPassword: "",
   role: "",
+  name: "",
+  phone: "",
   state: "",
   district: "",
   village: "",
@@ -30,94 +43,158 @@ const initialForm = {
   registrationId: "",
 };
 
+function hasPasswordProvider(user) {
+  return Boolean(user?.providerData?.some((p) => p.providerId === "password"));
+}
+
 export default function Register() {
   const navigate = useNavigate();
   const { lang, setLang } = useLanguage();
-  const { firebaseUser, role: existingRole, loading: authLoading, refresh } = useAuth();
-  const [step, setStep] = useState(1); // 1 = verify mobile, 2 = choose role, 3 = role details
+  const { firebaseUser, account, role: existingRole, loading: authLoading, refresh } = useAuth();
+  const [step, setStep] = useState(1); // 1 verify email, 2 set username/password, 3 choose role, 4 role details
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(Boolean(firebaseUser));
-  const [resendIn, setResendIn] = useState(0);
-  const [complete, setComplete] = useState(false);
-  const [otpConfirmation, setOtpConfirmation] = useState(null);
-  const [otpSending, setOtpSending] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+  const [needsEmailConfirm, setNeedsEmailConfirm] = useState(false);
+  const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [complete, setComplete] = useState(false);
 
+  // Resume at the right step based on current auth state.
   useEffect(() => {
-    if (!authLoading && existingRole) navigate(ROLE_HOME[existingRole] || "/home", { replace: true });
-  }, [authLoading, existingRole, navigate]);
-
-  useEffect(() => {
-    if (firebaseUser && step === 1) {
-      setOtpVerified(true);
-      setStep(2);
+    if (authLoading) return;
+    if (existingRole) {
+      navigate(ROLE_HOME[existingRole] || "/home", { replace: true });
+      return;
     }
-  }, [firebaseUser, step]);
+    if (firebaseUser && account) {
+      if (!hasPasswordProvider(firebaseUser) || !account.username) {
+        setStep((current) => (current < 2 ? 2 : current));
+      } else {
+        setStep((current) => (current < 3 ? 3 : current));
+      }
+      if (firebaseUser.email) setForm((current) => ({ ...current, email: firebaseUser.email }));
+      if (account.username) setForm((current) => ({ ...current, username: account.username }));
+    }
+  }, [authLoading, firebaseUser, account, existingRole, navigate]);
 
+  // Handle landing here from the emailed verification link. The email-link oobCode is
+  // single-use, so this must run exactly once even under React 18 StrictMode's
+  // deliberate double-invoke of effects in development.
+  const emailLinkHandled = useRef(false);
   useEffect(() => {
-    if (resendIn <= 0) return undefined;
-    const timer = window.setInterval(() => setResendIn((current) => Math.max(current - 1, 0)), 1000);
-    return () => window.clearInterval(timer);
-  }, [resendIn]);
+    if (emailLinkHandled.current) return;
+    if (!isSignInWithEmailLink(auth, window.location.href)) return;
+    emailLinkHandled.current = true;
+    const storedEmail = window.localStorage.getItem(EMAIL_FOR_SIGNIN_KEY);
+    if (!storedEmail) {
+      setNeedsEmailConfirm(true);
+      return;
+    }
+    completeEmailLinkSignIn(storedEmail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const completeEmailLinkSignIn = async (emailToConfirm) => {
+    try {
+      setSending(true);
+      setErrors({});
+      await signInWithEmailLink(auth, emailToConfirm, window.location.href);
+      window.localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY);
+      window.history.replaceState({}, document.title, "/register");
+      setNeedsEmailConfirm(false);
+      await refresh();
+      setStep(2);
+    } catch (error) {
+      // If a concurrent call already completed the sign-in (e.g. StrictMode's double
+      // effect invoke in dev), we're already in the target state — recover silently
+      // instead of surfacing a spurious error.
+      if (auth.currentUser?.email === emailToConfirm) {
+        window.localStorage.removeItem(EMAIL_FOR_SIGNIN_KEY);
+        window.history.replaceState({}, document.title, "/register");
+        setNeedsEmailConfirm(false);
+        await refresh();
+        setStep(2);
+        return;
+      }
+      console.error("[KisanSetu] Email link sign-in failed:", error?.code, error);
+      setErrors({ form: getFirebaseAuthError(error), formError: true });
+    } finally {
+      setSending(false);
+    }
+  };
 
   const updateField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "", form: "" }));
   };
 
-  const getIndianPhoneNumber = () => `+91${form.mobile}`;
-
-  const sendOtp = async () => {
-    if (!/^[6-9]\d{9}$/.test(form.mobile)) {
-      setErrors({ mobile: "Enter a valid 10-digit mobile number." });
+  const sendVerificationLink = async () => {
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) {
+      setErrors({ email: "Enter a valid email address." });
       return;
     }
     try {
-      setOtpSending(true);
+      setSending(true);
       setErrors({});
-      if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", { size: "invisible" });
-      }
-      const confirmation = await signInWithPhoneNumber(auth, getIndianPhoneNumber(), window.recaptchaVerifier);
-      setOtpConfirmation(confirmation);
-      setOtpSent(true);
-      setResendIn(30);
-      setErrors({ form: `OTP sent to ${getIndianPhoneNumber()}.` });
+      const actionCodeSettings = { url: `${window.location.origin}/register`, handleCodeInApp: true };
+      await sendSignInLinkToEmail(auth, form.email.trim(), actionCodeSettings);
+      window.localStorage.setItem(EMAIL_FOR_SIGNIN_KEY, form.email.trim());
+      setLinkSent(true);
     } catch (error) {
-      setErrors({ form: getFirebaseOtpError(error), formError: true });
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.clear();
-        delete window.recaptchaVerifier;
-      }
+      console.error("[KisanSetu] Sending verification link failed:", error?.code, error);
+      setErrors({ form: getFirebaseAuthError(error), formError: true });
     } finally {
-      setOtpSending(false);
+      setSending(false);
     }
   };
 
-  const verifyOtp = async () => {
-    if (!otpConfirmation || !/^\d{6}$/.test(form.otp)) {
-      setErrors({ otp: "Enter the 6-digit OTP sent to your mobile." });
-      return;
+  const validateUsernamePassword = () => {
+    const nextErrors = {};
+    if (!/^[a-zA-Z0-9_.]{3,24}$/.test(form.username)) {
+      nextErrors.username = "3-24 characters: letters, numbers, underscore or dot.";
     }
+    if (form.password.length < 6) nextErrors.password = "Use at least 6 characters.";
+    if (form.password !== form.confirmPassword) nextErrors.confirmPassword = "Passwords do not match.";
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const completeUsernameAndPassword = async (event) => {
+    event.preventDefault();
+    if (!validateUsernamePassword() || saving) return;
     try {
-      await otpConfirmation.confirm(form.otp);
-      setOtpVerified(true);
-      setStep(2);
+      setSaving(true);
+      if (hasPasswordProvider(auth.currentUser)) {
+        // A password is already linked (e.g. a retried/interrupted attempt) — make sure
+        // the one just typed here is the one that actually takes effect, not silently
+        // discarded in favor of whatever was linked before.
+        await updatePassword(auth.currentUser, form.password);
+      } else {
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, form.password);
+        await linkWithCredential(auth.currentUser, credential);
+      }
+      await updateProfile(auth.currentUser, { displayName: form.username });
+      await apiSetUsername(form.username);
+      await refresh();
+      setStep(3);
     } catch (error) {
-      setErrors({ otp: error?.code === "auth/invalid-verification-code" ? "Incorrect OTP. Please try again." : getFirebaseOtpError(error) });
+      console.error("[KisanSetu] Setting username/password failed:", error?.code, error);
+      setErrors({ form: getFirebaseAuthError(error), formError: true });
+    } finally {
+      setSaving(false);
     }
   };
 
   const chooseRole = (roleValue) => {
     updateField("role", roleValue);
-    setStep(3);
+    setStep(4);
   };
 
   const validateRoleDetails = () => {
     const nextErrors = {};
     if (!form.name.trim()) nextErrors.name = "Enter a name.";
+    if (!/^[6-9]\d{9}$/.test(form.phone)) nextErrors.phone = "Enter a valid 10-digit mobile number.";
     if (form.role === "FARMER") {
       ["state", "district", "village"].forEach((f) => { if (!form[f].trim()) nextErrors[f] = "Required."; });
       if (!form.farmerType) nextErrors.farmerType = "Choose one.";
@@ -135,7 +212,7 @@ export default function Register() {
     if (!validateRoleDetails() || saving) return;
     try {
       setSaving(true);
-      const phone = getIndianPhoneNumber();
+      const phone = `+91${form.phone}`;
       if (form.role === "FARMER") {
         await registerFarmer({
           name: form.name.trim(),
@@ -184,7 +261,7 @@ export default function Register() {
           <div className="success-icon" aria-hidden="true">✓</div>
           <p className="registration-eyebrow">Registration complete</p>
           <h1>Welcome to Kisan Setu</h1>
-          <p>Your <strong>{form.role}</strong> account is ready, <strong>{form.name}</strong>.</p>
+          <p>Your <strong>{form.role}</strong> account is ready, <strong>{form.username}</strong>.</p>
           <button className="registration-primary" type="button" onClick={() => navigate(ROLE_HOME[form.role] || "/home")}>
             Continue to Dashboard <span aria-hidden="true">→</span>
           </button>
@@ -192,9 +269,6 @@ export default function Register() {
       </main>
     );
   }
-
-  let otpButtonLabel = "Send OTP";
-  if (otpSent) otpButtonLabel = resendIn > 0 ? `Resend ${resendIn}s` : "Resend OTP";
 
   return (
     <main className="registration-page">
@@ -208,14 +282,13 @@ export default function Register() {
             <option value="mr">मराठी</option>
           </select>
         </div>
-        <div id="recaptcha-container" aria-hidden="true" />
         <div className="registration-heading">
           <p className="registration-eyebrow">Kisan Setu onboarding</p>
           <h1 id="registration-title">Create your account</h1>
-          <p>Verify your mobile number, then tell us how you'll use Kisan Setu.</p>
+          <p>Verify your email, set a username + password, then tell us how you'll use Kisan Setu.</p>
         </div>
         <ol className="registration-progress" aria-label="Registration progress">
-          {["Verify Mobile", "Choose Role", "Your Details"].map((label, index) => (
+          {["Verify Email", "Username & Password", "Choose Role", "Your Details"].map((label, index) => (
             <li key={label} className={step >= index + 1 ? "active" : ""}>
               <span>{index + 1}</span>
               <b>{label}</b>
@@ -224,33 +297,58 @@ export default function Register() {
         </ol>
 
         {errors.form && <p className={`registration-message ${errors.formError ? "error" : "success"}`}>{errors.form}</p>}
-        {errors.otp && <p className="registration-message error">{errors.otp}</p>}
 
         {step === 1 && (
           <div className="registration-step">
-            <h2>Verify Mobile</h2>
-            <p className="step-help">We'll send a one-time code to confirm it's you.</p>
-            <Field label="Mobile Number" error={errors.mobile}>
-              <div className="registration-input-action">
-                <div className="phone-input-wrap">
-                  <span className="phone-country-code">+91</span>
-                  <input value={form.mobile} onChange={(event) => updateField("mobile", event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" inputMode="numeric" autoComplete="tel" />
-                </div>
-                <button type="button" className="inline-action" onClick={sendOtp} disabled={resendIn > 0 || otpSending}>{otpSending ? "Sending..." : otpButtonLabel}</button>
-              </div>
-            </Field>
-            {otpSent && (
-              <Field label="Enter OTP" error={errors.otp}>
-                <div className="registration-input-action">
-                  <input value={form.otp} onChange={(event) => updateField("otp", event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="6-digit OTP" inputMode="numeric" autoComplete="one-time-code" />
-                  <button type="button" className="inline-action" onClick={verifyOtp}>Verify OTP</button>
-                </div>
-              </Field>
+            <h2>Verify Email</h2>
+            {needsEmailConfirm ? (
+              <>
+                <p className="step-help">Confirm the email you signed up with to finish verification.</p>
+                <Field label="Email" error={errors.email}>
+                  <input type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="you@example.com" />
+                </Field>
+                <button type="button" className="registration-primary" disabled={sending} onClick={() => completeEmailLinkSignIn(form.email.trim())}>
+                  {sending ? "Verifying..." : "Confirm Email"}
+                </button>
+              </>
+            ) : linkSent ? (
+              <p className="registration-message success">
+                We've sent a verification link to <strong>{form.email}</strong>. Open it on this device to continue.
+              </p>
+            ) : (
+              <>
+                <p className="step-help">We'll email you a link to confirm it's really you.</p>
+                <Field label="Email Address" error={errors.email}>
+                  <input type="email" value={form.email} onChange={(event) => updateField("email", event.target.value)} placeholder="you@example.com" autoComplete="email" />
+                </Field>
+                <button type="button" className="registration-primary" disabled={sending} onClick={sendVerificationLink}>
+                  {sending ? "Sending..." : "Send Verification Link"} <span aria-hidden="true">→</span>
+                </button>
+              </>
             )}
           </div>
         )}
 
         {step === 2 && (
+          <form className="registration-step" onSubmit={completeUsernameAndPassword}>
+            <h2>Set Username & Password</h2>
+            <p className="step-help">Email verified. Choose how you'll log in from now on.</p>
+            <Field label="Username" error={errors.username}>
+              <input value={form.username} onChange={(event) => updateField("username", event.target.value)} placeholder="e.g. ramesh_farms" autoComplete="username" />
+            </Field>
+            <Field label="Password" error={errors.password}>
+              <input type="password" value={form.password} onChange={(event) => updateField("password", event.target.value)} placeholder="At least 6 characters" autoComplete="new-password" />
+            </Field>
+            <Field label="Confirm Password" error={errors.confirmPassword}>
+              <input type="password" value={form.confirmPassword} onChange={(event) => updateField("confirmPassword", event.target.value)} placeholder="Re-enter your password" autoComplete="new-password" />
+            </Field>
+            <button type="submit" className="registration-primary" disabled={saving}>
+              {saving ? "Saving..." : "Continue"} <span aria-hidden="true">→</span>
+            </button>
+          </form>
+        )}
+
+        {step === 3 && (
           <div className="registration-step">
             <h2>Choose your role</h2>
             <p className="step-help">This decides which dashboard and features you'll see.</p>
@@ -268,12 +366,18 @@ export default function Register() {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <form className="registration-form" onSubmit={completeRegistration}>
             <div className="registration-step">
               <h2>{ROLES.find((r) => r.value === form.role)?.label} Details</h2>
               <Field label="Full Name / Organization Name" error={errors.name}>
                 <input value={form.name} onChange={(event) => updateField("name", event.target.value)} placeholder="Enter your name" autoComplete="name" />
+              </Field>
+              <Field label="Mobile Number" error={errors.phone}>
+                <div className="phone-input-wrap">
+                  <span className="phone-country-code">+91</span>
+                  <input value={form.phone} onChange={(event) => updateField("phone", event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="10-digit mobile number" inputMode="numeric" autoComplete="tel" />
+                </div>
               </Field>
 
               {form.role === "FARMER" && (
@@ -320,7 +424,7 @@ export default function Register() {
               )}
             </div>
             <div className="registration-actions">
-              <button type="button" className="registration-secondary" onClick={() => setStep(2)}>Back</button>
+              <button type="button" className="registration-secondary" onClick={() => setStep(3)}>Back</button>
               <button type="submit" className="registration-primary" disabled={saving}>{saving ? "Saving..." : "Create Account"} <span aria-hidden="true">→</span></button>
             </div>
           </form>

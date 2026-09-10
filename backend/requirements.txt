@@ -13,8 +13,9 @@ geoalchemy2==0.15.2      # PostGIS support
 redis==5.0.8
 
 # --- Auth ---
-# Firebase Authentication (phone OTP on the frontend) is the sole identity provider for
-# every role — the backend only verifies ID tokens server-side via firebase-admin.
+# Firebase Authentication (email link verification + password, on the frontend) is the
+# sole identity provider for every role — the backend only verifies ID tokens
+# server-side via firebase-admin.
 firebase-admin==6.5.0
 python-multipart==0.0.9
 

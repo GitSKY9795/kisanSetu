@@ -27,6 +27,8 @@ class User(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     firebase_uid: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=True)
     phone: Mapped[str] = mapped_column(String, nullable=True)
     full_name: Mapped[str] = mapped_column(String, nullable=True)
     role: Mapped[UserRole | None] = mapped_column(Enum(UserRole), nullable=True)

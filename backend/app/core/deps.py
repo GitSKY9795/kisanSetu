@@ -28,7 +28,11 @@ def get_current_user(
     uid = claims["uid"]
     user = db.query(User).filter(User.firebase_uid == uid).first()
     if not user:
-        user = User(firebase_uid=uid, phone=claims.get("phone_number"))
+        user = User(
+            firebase_uid=uid,
+            phone=claims.get("phone_number"),
+            email=claims.get("email"),
+        )
         db.add(user)
         db.commit()
         db.refresh(user)

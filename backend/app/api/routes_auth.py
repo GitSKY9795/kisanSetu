@@ -1,12 +1,14 @@
 """
-Identity API — Firebase is the sole identity provider for every role. A user signs in
-with Firebase (phone OTP, already wired on the frontend), then finishes registration
-here to become a FARMER, BUYER or FPO. ADMIN accounts are seeded, not self-service.
+Identity API — Firebase is the sole identity provider for every role. A user verifies
+their email (Firebase Email Link), sets a username + password, then finishes
+registration here to become a FARMER, BUYER or FPO. ADMIN accounts are seeded, not
+self-service.
 """
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -75,7 +77,13 @@ def get_profile(user: User, db: Session):
 
 def _me_payload(user: User, db: Session) -> dict:
     return {
-        "user": {"id": str(user.id), "phone": user.phone, "full_name": user.full_name},
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "username": user.username,
+            "phone": user.phone,
+            "full_name": user.full_name,
+        },
         "role": user.role.value if user.role else None,
         "profile": get_profile(user, db),
     }
@@ -83,8 +91,43 @@ def _me_payload(user: User, db: Session) -> dict:
 
 @router.get("/me")
 def get_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Called right after Firebase sign-in to resolve identity: role + linked profile.
-    role is null until the frontend sends the user through /auth/register/{role}."""
+    """Called right after Firebase sign-in to resolve identity: username + role + linked
+    profile. username is null until POST /auth/username; role is null until the frontend
+    sends the user through /auth/register/{role}."""
+    return _me_payload(user, db)
+
+
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9_.]{3,24}$")
+
+
+class SetUsernameRequest(BaseModel):
+    username: str
+
+    @field_validator("username")
+    @classmethod
+    def valid_username(cls, v: str) -> str:
+        if not USERNAME_RE.match(v):
+            raise ValueError("Username must be 3-24 characters: letters, numbers, underscore or dot.")
+        return v
+
+
+@router.post("/username")
+def set_username(
+    req: SetUsernameRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sets the account's username — called right after the user links a password to
+    their (already email-verified) Firebase account, before role selection."""
+    if user.username:
+        raise HTTPException(status_code=400, detail="Username is already set for this account.")
+    if db.query(User).filter(User.username == req.username).first():
+        raise HTTPException(status_code=409, detail="That username is already taken.")
+
+    user.username = req.username
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return _me_payload(user, db)
 
 

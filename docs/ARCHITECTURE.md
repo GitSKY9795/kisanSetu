@@ -59,15 +59,18 @@ KisanSetu is an **agentic agricultural assistant**, not a static chatbot:
 
 ## Authentication & Roles
 
-Firebase Authentication (phone OTP) is the sole identity provider for every role —
-Farmer, Buyer, FPO, Admin. The frontend signs the user in with Firebase directly; the
-backend never sees a password, only a short-lived Firebase ID token on the
-`Authorization: Bearer` header of every request, verified server-side via
+Firebase Authentication (email link verification + password) is the sole identity
+provider for every role — Farmer, Buyer, FPO, Admin. The frontend signs the user in with
+Firebase directly; the backend never sees a password, only a short-lived Firebase ID
+token on the `Authorization: Bearer` header of every request, verified server-side via
 `firebase-admin` (`backend/app/core/firebase.py`).
 
-On first sign-in a `User` row is created with `role = null`. The frontend then walks the
-user through `POST /auth/register/{farmer|buyer|fpo}`, which creates the matching profile
-row (Farmer/Buyer/FPO) and sets the role — this is the one point where a self-service
+Sign-up is: verify email (Firebase Email Link — proves ownership, no password needed
+yet) → link a password credential to that same account + set a username
+(`POST /auth/username`) → choose a role. On first sign-in a `User` row is created with
+`role = null`. The frontend then walks the user through
+`POST /auth/register/{farmer|buyer|fpo}`, which creates the matching profile row
+(Farmer/Buyer/FPO) and sets the role — this is the one point where a self-service
 account picks its role; Admin accounts are seeded via `backend/scripts/promote_admin.py`,
 not self-registered. `backend/app/core/deps.py` exposes `require_role(...)` so every
 write endpoint declares which role(s) may call it, while read endpoints stay open to any
@@ -96,6 +99,6 @@ aggregate queries over those same tables — not separately maintained numbers.
 - **Frontend** → Vercel (React build)
 - **Backend** → Render/Railway (Docker container running Uvicorn/FastAPI)
 - **Database** → Postgres + PostGIS (SQLite for local dev)
-- **Auth** → Firebase Authentication (phone OTP)
+- **Auth** → Firebase Authentication (email link + password)
 - **Cache/Queue** → Redis (Upstash free tier or Render Redis add-on)
 - **CI/CD** → GitHub Actions — lint + test on every PR, auto-deploy `main` to Vercel/Render

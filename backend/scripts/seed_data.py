@@ -3,8 +3,8 @@ Seeds the local DB with demo farmers, buyers, an FPO pool and a crop listing so 
 Marketplace/FPO/Admin dashboards have something real to browse before anyone signs up.
 
 These seeded profiles use placeholder firebase_uid values, so you can't actually log in
-as them through the real Firebase phone-OTP flow — they're browsing data only. To
-exercise the real login → register → dashboard flow, sign in through the app UI (see
+as them through the real Firebase email-link + password flow — they're browsing data
+only. To exercise the real register → dashboard flow, sign in through the app UI (see
 README "Getting Started"). To make a real logged-in account an ADMIN, use
 `scripts/promote_admin.py` instead.
 

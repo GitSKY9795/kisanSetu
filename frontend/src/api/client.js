@@ -21,6 +21,7 @@ apiClient.interceptors.request.use(async (config) => {
 
 // --- Identity ---
 export const getMe = () => apiClient.get("/auth/me").then((r) => r.data);
+export const setUsername = (username) => apiClient.post("/auth/username", { username }).then((r) => r.data);
 export const registerFarmer = (payload) => apiClient.post("/auth/register/farmer", payload).then((r) => r.data);
 export const registerBuyer = (payload) => apiClient.post("/auth/register/buyer", payload).then((r) => r.data);
 export const registerFpo = (payload) => apiClient.post("/auth/register/fpo", payload).then((r) => r.data);

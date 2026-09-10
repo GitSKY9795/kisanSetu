@@ -7,22 +7,26 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [firebaseUser, setFirebaseUser] = useState(null);
+  const [account, setAccount] = useState(null); // { id, email, username, phone, full_name }
   const [role, setRole] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     if (!auth.currentUser) {
+      setAccount(null);
       setRole(null);
       setProfile(null);
       return null;
     }
     try {
       const me = await getMe();
+      setAccount(me.user);
       setRole(me.role);
       setProfile(me.profile);
       return me;
     } catch {
+      setAccount(null);
       setRole(null);
       setProfile(null);
       return null;
@@ -35,6 +39,7 @@ export function AuthProvider({ children }) {
       if (user) {
         await refresh();
       } else {
+        setAccount(null);
         setRole(null);
         setProfile(null);
       }
@@ -45,12 +50,13 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     await signOut(auth);
+    setAccount(null);
     setRole(null);
     setProfile(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, role, profile, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ firebaseUser, account, role, profile, loading, refresh, logout }}>
       {children}
     </AuthContext.Provider>
   );

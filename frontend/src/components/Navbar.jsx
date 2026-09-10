@@ -31,10 +31,10 @@ function linksForRole(role, t) {
 export default function Navbar() {
   const { lang, setLang, t, languages } = useLanguage();
   const navigate = useNavigate();
-  const { role, profile, logout } = useAuth();
+  const { role, account, logout } = useAuth();
 
   const links = role ? linksForRole(role, t) : [];
-  const displayName = profile?.name || profile?.organization || "Account";
+  const displayName = account?.username || account?.email || "Account";
 
   const handleLogout = async () => {
     await logout();
