@@ -2,6 +2,7 @@ from app.models.buyer import Buyer
 from app.models.crop import CropListing
 from app.models.farmer import Farmer
 from app.models.fpo import FPO, FPOPool, FPOPoolMember
+from app.models.grievance import Grievance
 from app.models.logistics_storage import LogisticsRoute, StorageUnit
 from app.models.marketplace import BuyerRequirement, MarketDemand, MarketPrice, Offer
 from app.models.quality import QualityReport
@@ -25,4 +26,5 @@ __all__ = [
     "LogisticsRoute",
     "QualityReport",
     "Transaction",
+    "Grievance",
 ]

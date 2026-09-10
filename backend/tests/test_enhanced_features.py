@@ -9,10 +9,39 @@ Tests for newly added SIH 2026 features:
 - Grievance Redressal
 - FPO Member Payout Ledger
 """
+import uuid
+
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.database import SessionLocal
+from app.core.deps import get_current_user
+from app.models.buyer import Buyer
+from app.models.crop import CropListing
+from app.models.farmer import Farmer
+from app.models.fpo import FPO, FPOPool, FPOPoolMember
+from app.models.transaction import Transaction
+from app.models.user import User, UserRole
 
 client = TestClient(app)
+
+
+def _unique_phone() -> str:
+    return f"9{uuid.uuid4().int % 10**9:09d}"
+
+
+def _make_user(db, role) -> User:
+    user = User(firebase_uid=f"test-{uuid.uuid4().hex}", phone=_unique_phone(), full_name=f"Test {role.value}", role=role)
+    db.add(user)
+    db.flush()
+    return user
+
+
+def _login_as(user: User):
+    app.dependency_overrides[get_current_user] = lambda: user
+
+
+def _logout():
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_nearby_mandis_arbitrage():
@@ -55,32 +84,51 @@ def test_quality_certificate_generation():
 
 
 def test_marketplace_offers_and_negotiation():
-    # Submit offer
-    offer_payload = {
-        "listing_id": "fl-01",
-        "crop_name": "Wheat",
-        "farmer_name": "Ramesh Kumar",
-        "buyer_name": "AgriCorp Processing Ltd",
-        "buyer_category": "Processor",
-        "quantity_kg": 500.0,
-        "asking_price_per_kg": 25.50,
-        "offered_price_per_kg": 26.00,
-        "terms": "48hr farmgate pickup"
-    }
-    res = client.post("/marketplace/offers", json=offer_payload)
-    assert res.status_code == 200
-    offer_data = res.json()
-    offer_id = offer_data["id"]
+    db = SessionLocal()
+    try:
+        farmer_user = _make_user(db, UserRole.FARMER)
+        farmer = Farmer(user_id=farmer_user.id, name="Test Farmer", phone=farmer_user.phone, district="Ujjain", state="Madhya Pradesh")
+        db.add(farmer)
+        db.flush()
 
-    # Counter offer
-    res_counter = client.post(f"/marketplace/offers/{offer_id}/counter", json={"counter_price_per_kg": 26.50})
-    assert res_counter.status_code == 200
-    assert res_counter.json()["offered_price_per_kg"] == 26.50
+        buyer_user = _make_user(db, UserRole.BUYER)
+        buyer = Buyer(user_id=buyer_user.id, name="Test Buyer Corp", phone=buyer_user.phone, buyer_category="Processor")
+        db.add(buyer)
+        db.flush()
 
-    # Accept offer
-    res_accept = client.post(f"/marketplace/offers/{offer_id}/accept")
-    assert res_accept.status_code == 200
-    assert res_accept.json()["status"] == "ACCEPTED"
+        listing = CropListing(
+            farmer_id=farmer.id, crop_name="Wheat", quantity_kg=500.0, price_per_kg=25.50,
+            district="Ujjain", state="Madhya Pradesh", status="LISTED",
+        )
+        db.add(listing)
+        db.commit()
+        db.refresh(listing)
+
+        # Submit offer as the buyer
+        _login_as(buyer_user)
+        offer_payload = {
+            "listing_id": str(listing.id),
+            "offered_price_per_kg": 26.00,
+            "offered_quantity_kg": 500.0,
+            "terms": "48hr farmgate pickup",
+        }
+        res = client.post("/marketplace/offers", json=offer_payload)
+        assert res.status_code == 200
+        offer_id = res.json()["id"]
+
+        # Counter offer
+        res_counter = client.post(f"/marketplace/offers/{offer_id}/counter", json={"counter_price_per_kg": 26.50})
+        assert res_counter.status_code == 200
+        assert res_counter.json()["offered_price_per_kg"] == 26.50
+
+        # Accept offer as the farmer who owns the listing
+        _login_as(farmer_user)
+        res_accept = client.post(f"/marketplace/offers/{offer_id}/accept")
+        assert res_accept.status_code == 200
+        assert res_accept.json()["offer"]["status"] == "ACCEPTED"
+    finally:
+        _logout()
+        db.close()
 
 
 def test_warehouses_and_pledge_loan():
@@ -102,39 +150,89 @@ def test_warehouses_and_pledge_loan():
 
 
 def test_grievances_lifecycle():
-    # List grievances
-    res_list = client.get("/grievances")
-    assert res_list.status_code == 200
+    db = SessionLocal()
+    try:
+        farmer_user = _make_user(db, UserRole.FARMER)
+        farmer = Farmer(user_id=farmer_user.id, name="Test Farmer", phone=farmer_user.phone, district="Ujjain", state="Madhya Pradesh")
+        db.add(farmer)
+        db.flush()
 
-    # Raise grievance
-    payload = {
-        "order_id": "txn-881",
-        "raised_by_type": "FARMER",
-        "raised_by_name": "Ramesh Kumar",
-        "against_party": "AgriCorp Processing Ltd",
-        "category": "Weight Shortage",
-        "crop_name": "Wheat",
-        "disputed_amount_inr": 1500.0,
-        "description": "50kg weighing discrepancy at unloading weighbridge",
-        "evidence_notes": "Weighbridge slip attached"
-    }
-    res_raise = client.post("/grievances", json=payload)
-    assert res_raise.status_code == 200
-    grv_id = res_raise.json()["id"]
+        buyer_user = _make_user(db, UserRole.BUYER)
+        buyer = Buyer(user_id=buyer_user.id, name="Test Buyer Corp", phone=buyer_user.phone, buyer_category="Processor")
+        db.add(buyer)
+        db.flush()
 
-    # Resolve grievance
-    res_resolve = client.post(
-        f"/grievances/{grv_id}/resolve",
-        json={"resolution_summary": "Re-weighed and verified. Reimbursement issued.", "settlement_amount_inr": 1500.0}
-    )
-    assert res_resolve.status_code == 200
-    assert res_resolve.json()["status"] == "RESOLVED"
+        txn = Transaction(
+            invoice_no=f"INV-TEST-{uuid.uuid4().hex[:8].upper()}",
+            farmer_id=farmer.id, buyer_id=buyer.id, crop_name="Wheat",
+            quantity_kg=500.0, agreed_price_per_kg=25.0,
+        )
+        db.add(txn)
+        db.commit()
+        db.refresh(txn)
+
+        admin_user = _make_user(db, UserRole.ADMIN)
+        db.commit()
+
+        # List grievances (as the farmer, before raising any)
+        _login_as(farmer_user)
+        res_list = client.get("/grievances")
+        assert res_list.status_code == 200
+
+        # Raise grievance
+        payload = {
+            "transaction_id": str(txn.id),
+            "category": "Weight Shortage",
+            "disputed_amount_inr": 1500.0,
+            "description": "50kg weighing discrepancy at unloading weighbridge",
+        }
+        res_raise = client.post("/grievances", json=payload)
+        assert res_raise.status_code == 200
+        grv_id = res_raise.json()["id"]
+
+        # Resolve grievance as admin
+        _login_as(admin_user)
+        res_resolve = client.post(
+            f"/grievances/{grv_id}/resolve",
+            json={"resolution_summary": "Re-weighed and verified. Reimbursement issued."},
+        )
+        assert res_resolve.status_code == 200
+        assert res_resolve.json()["status"] == "RESOLVED"
+    finally:
+        _logout()
+        db.close()
 
 
 def test_fpo_payout_ledger():
-    res = client.get("/fpos/pools/pool-101/payout-ledger")
-    assert res.status_code == 200
-    data = res.json()
-    assert "ledger" in data
-    assert len(data["ledger"]) > 0
-    assert data["gross_revenue_inr"] > 0
+    db = SessionLocal()
+    try:
+        fpo_owner = _make_user(db, UserRole.FPO)
+        fpo = FPO(owner_user_id=fpo_owner.id, name="Test FPO", district="Nashik", state="Maharashtra")
+        db.add(fpo)
+        db.flush()
+
+        farmer_user = _make_user(db, UserRole.FARMER)
+        farmer = Farmer(user_id=farmer_user.id, name="Test Farmer", phone=farmer_user.phone, district="Nashik", state="Maharashtra")
+        db.add(farmer)
+        db.flush()
+
+        pool = FPOPool(
+            fpo_id=fpo.id, crop_name="Onion", total_quantity_kg=1000.0,
+            target_quantity_kg=5000.0, target_price_per_kg=27.0, mandi_benchmark_price_per_kg=24.5,
+        )
+        db.add(pool)
+        db.flush()
+        db.add(FPOPoolMember(pool_id=pool.id, farmer_id=farmer.id, quantity_kg=1000.0))
+        db.commit()
+        db.refresh(pool)
+
+        _login_as(farmer_user)
+        res = client.get(f"/fpos/pools/{pool.id}/payout-ledger")
+        assert res.status_code == 200
+        data = res.json()
+        assert "ledger" in data
+        assert len(data["ledger"]) > 0
+        assert data["gross_revenue_inr"] > 0
+    finally:
+        _logout()
+        db.close()

@@ -1,39 +1,37 @@
 import axios from "axios";
+import { auth } from "../firebase.js";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
-const FARMER_API_BASE_URL = import.meta.env.VITE_FARMER_API_BASE_URL || "http://localhost:4000";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
 });
 
-const farmerApiClient = axios.create({
-  baseURL: FARMER_API_BASE_URL,
-  headers: { "Content-Type": "application/json" },
-  withCredentials: true,
+// Every request automatically carries the logged-in user's Firebase ID token, so the
+// backend can resolve identity + role without any call site having to think about auth.
+apiClient.interceptors.request.use(async (config) => {
+  const user = auth.currentUser;
+  if (user) {
+    const token = await user.getIdToken();
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
-// --- Auth ---
-export const registerUser = (payload) => apiClient.post("/auth/register", payload).then((r) => r.data);
-export const loginUser = (payload) => apiClient.post("/auth/login", payload).then((r) => r.data);
-export const createFarmer = (payload, firebaseToken) =>
-  farmerApiClient.post("/api/farmers", payload, { headers: { Authorization: `Bearer ${firebaseToken}` } }).then((r) => r.data);
-export const createApplicationSession = (firebaseToken) =>
-  farmerApiClient.post("/api/auth/login", { id_token: firebaseToken }).then((r) => r.data);
-export const getApplicationSession = () => farmerApiClient.get("/api/auth/session").then((r) => r.data);
-export const logoutApplicationSession = () => farmerApiClient.post("/api/auth/logout").then((r) => r.data);
+// --- Identity ---
+export const getMe = () => apiClient.get("/auth/me").then((r) => r.data);
+export const registerFarmer = (payload) => apiClient.post("/auth/register/farmer", payload).then((r) => r.data);
+export const registerBuyer = (payload) => apiClient.post("/auth/register/buyer", payload).then((r) => r.data);
+export const registerFpo = (payload) => apiClient.post("/auth/register/fpo", payload).then((r) => r.data);
 
-// --- Farmers ---
-export const listFarmerCropListings = () => apiClient.get("/farmers/listings").then((r) => r.data);
-export const createFarmerCropListing = (payload) => apiClient.post("/farmers/listings", payload).then((r) => r.data);
-export const getFarmerProfile = (farmerId) => apiClient.get(`/farmers/profile/${farmerId}`).then((r) => r.data);
+// --- Farmers (scoped to the logged-in farmer) ---
+export const listMyCropListings = () => apiClient.get("/farmers/listings").then((r) => r.data);
+export const createCropListing = (payload) => apiClient.post("/farmers/listings", payload).then((r) => r.data);
 
 // --- Buyers ---
 export const listBuyerRequirements = (params) => apiClient.get("/buyers/requirements", { params }).then((r) => r.data);
 export const createBuyerRequirement = (payload) => apiClient.post("/buyers/requirements", payload).then((r) => r.data);
-export const listBuyerOffers = () => apiClient.get("/buyers/offers").then((r) => r.data);
-export const submitBuyerOffer = (payload) => apiClient.post("/buyers/offers", payload).then((r) => r.data);
 
 // --- FPOs ---
 export const listFPOs = () => apiClient.get("/fpos").then((r) => r.data);
@@ -53,8 +51,8 @@ export const counterMarketplaceOffer = (offerId, payload) =>
   apiClient.post(`/marketplace/offers/${offerId}/counter`, payload).then((r) => r.data);
 export const acceptMarketplaceOffer = (offerId) =>
   apiClient.post(`/marketplace/offers/${offerId}/accept`).then((r) => r.data);
-export const getBuyerTrust = (buyerName) =>
-  apiClient.get(`/marketplace/buyer-trust/${encodeURIComponent(buyerName)}`).then((r) => r.data);
+export const getBuyerTrust = (buyerId) =>
+  apiClient.get(`/marketplace/buyer-trust/${buyerId}`).then((r) => r.data);
 
 // --- Prices & Arbitrage ---
 export const getCurrentPrice = (crop, params) =>
@@ -98,13 +96,10 @@ export const askAgent = (payload) => apiClient.post("/agent/query", payload).the
 
 // --- Transactions & 4-Stage Escrow ---
 export const listTransactions = () => apiClient.get("/transactions").then((r) => r.data);
-export const createTransaction = (payload) =>
-  apiClient.post("/transactions", payload).then((r) => r.data);
 export const advanceEscrowStage = (txnId) =>
   apiClient.post(`/transactions/${txnId}/advance-escrow`).then((r) => r.data);
 export const getDigitalInvoice = (txnId) =>
   apiClient.get(`/transactions/${txnId}/invoice`).then((r) => r.data);
-export const initiatePayment = (payload) => apiClient.post("/transactions/pay", payload).then((r) => r.data);
 
 // --- Grievance & Dispute Redressal ---
 export const listGrievances = (params) => apiClient.get("/grievances", { params }).then((r) => r.data);

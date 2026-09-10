@@ -13,10 +13,10 @@ geoalchemy2==0.15.2      # PostGIS support
 redis==5.0.8
 
 # --- Auth ---
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+# Firebase Authentication (phone OTP on the frontend) is the sole identity provider for
+# every role — the backend only verifies ID tokens server-side via firebase-admin.
+firebase-admin==6.5.0
 python-multipart==0.0.9
-supabase==2.7.4           # optional: only needed if you wire up Supabase auth/storage instead of local JWT + SQLite
 
 # --- AI / ML ---
 pandas==2.2.3

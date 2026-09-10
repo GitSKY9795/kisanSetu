@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import SellDecisionCard from "../components/SellDecisionCard.jsx";
 import NetRealizationCard from "../components/NetRealizationCard.jsx";
 import QualityGradingCard from "../components/QualityGradingCard.jsx";
-import { getDecision, getCurrentPrice, getNearbyMandis, listMarketplaceOffers, acceptMarketplaceOffer, counterMarketplaceOffer } from "../api/client.js";
+import { getDecision, getCurrentPrice, getNearbyMandis, listMarketplaceOffers, acceptMarketplaceOffer, counterMarketplaceOffer, listMyCropListings, createCropListing } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAssistant } from "../context/AssistantContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const CROPS = [
   { value: "Wheat", label: "Wheat (गेहूँ)" },
@@ -19,8 +20,9 @@ const CROPS = [
 export default function FarmerDashboard() {
   const { t } = useLanguage();
   const { openAssistant } = useAssistant();
+  const { profile } = useAuth();
 
-  const [activeTab, setActiveTab] = useState("decision"); // "decision" | "arbitrage" | "quality" | "offers"
+  const [activeTab, setActiveTab] = useState("decision"); // "decision" | "arbitrage" | "quality" | "listings" | "offers"
 
   const [form, setForm] = useState({
     crop_name: "Wheat",
@@ -40,6 +42,14 @@ export default function FarmerDashboard() {
   const [counterPrice, setCounterPrice] = useState("");
   const [activeOfferForCounter, setActiveOfferForCounter] = useState(null);
 
+  const [listings, setListings] = useState([]);
+  const [listingForm, setListingForm] = useState({
+    crop_name: "Wheat", variety: "Standard", quantity_kg: 500, price_per_kg: 25,
+    quality_grade: "Grade A", storage_available_kg: 0, harvest_date: "",
+  });
+  const [creatingListing, setCreatingListing] = useState(false);
+  const [listingError, setListingError] = useState(null);
+
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const loadOffers = () => {
@@ -48,9 +58,35 @@ export default function FarmerDashboard() {
       .catch(() => {});
   };
 
+  const loadListings = () => {
+    listMyCropListings()
+      .then((data) => setListings(data || []))
+      .catch(() => {});
+  };
+
   useEffect(() => {
     loadOffers();
+    loadListings();
   }, []);
+
+  const handleCreateListing = async (e) => {
+    e.preventDefault();
+    setCreatingListing(true);
+    setListingError(null);
+    try {
+      await createCropListing({
+        ...listingForm,
+        quantity_kg: Number(listingForm.quantity_kg),
+        price_per_kg: Number(listingForm.price_per_kg),
+        storage_available_kg: Number(listingForm.storage_available_kg) || 0,
+      });
+      loadListings();
+    } catch (err) {
+      setListingError(err.response?.data?.detail || t("common.backendError"));
+    } finally {
+      setCreatingListing(false);
+    }
+  };
 
   const handleEvaluate = async (e) => {
     if (e) e.preventDefault();
@@ -98,6 +134,7 @@ export default function FarmerDashboard() {
     try {
       await acceptMarketplaceOffer(offerId);
       loadOffers();
+      loadListings();
     } catch (err) {
       alert("Could not accept offer: " + (err.response?.data?.detail || err.message));
     }
@@ -134,9 +171,9 @@ export default function FarmerDashboard() {
           <span className="bg-amber-400 text-emerald-950 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
             {t("farmer.badge")}
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">{t("farmer.welcome")}</h1>
+          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">Welcome, {profile?.name || "Farmer"}</h1>
           <p className="text-emerald-200 text-sm mt-1 flex items-center gap-1.5 font-medium">
-            <span>📍</span> {t("farmer.location")}
+            <span>📍</span> {[profile?.village, profile?.district, profile?.state].filter(Boolean).join(", ") || t("farmer.location")}
           </p>
         </div>
         {currentPriceInfo && (
@@ -189,6 +226,21 @@ export default function FarmerDashboard() {
           }`}
         >
           {t("farmer.tabQuality")}
+        </button>
+        <button
+          onClick={() => setActiveTab("listings")}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition whitespace-nowrap flex items-center gap-2 ${
+            activeTab === "listings"
+              ? "bg-emerald-600 text-white shadow-md"
+              : "text-gray-600 hover:bg-gray-100"
+          }`}
+        >
+          My Listings{" "}
+          {listings.length > 0 && (
+            <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+              {listings.length}
+            </span>
+          )}
         </button>
         <button
           onClick={() => setActiveTab("offers")}
@@ -425,6 +477,70 @@ export default function FarmerDashboard() {
           initialQty={Number(form.quantity_kg)}
           initialDistrict={form.district}
         />
+      )}
+
+      {/* Tab: My Listings */}
+      {activeTab === "listings" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
+            <h3 className="text-lg font-black text-gray-900 border-b pb-2.5 flex items-center gap-2">
+              <span>➕</span> Create Produce Listing
+            </h3>
+            <form onSubmit={handleCreateListing} className="space-y-3.5 text-xs font-semibold">
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Crop</label>
+                <select
+                  value={listingForm.crop_name}
+                  onChange={(e) => setListingForm({ ...listingForm, crop_name: e.target.value })}
+                  className="w-full border border-gray-300 rounded-xl p-2.5 bg-gray-50 text-sm font-bold text-gray-800"
+                >
+                  {CROPS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Variety</label>
+                <input value={listingForm.variety} onChange={(e) => setListingForm({ ...listingForm, variety: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5" />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Quantity (kg)</label>
+                <input type="number" value={listingForm.quantity_kg} onChange={(e) => setListingForm({ ...listingForm, quantity_kg: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5" required />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Asking Price (₹/kg)</label>
+                <input type="number" step="0.5" value={listingForm.price_per_kg} onChange={(e) => setListingForm({ ...listingForm, price_per_kg: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5 font-black text-emerald-800" required />
+              </div>
+              <div>
+                <label className="block font-bold text-gray-700 mb-1">Quality Grade</label>
+                <select value={listingForm.quality_grade} onChange={(e) => setListingForm({ ...listingForm, quality_grade: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5 bg-gray-50">
+                  <option value="Grade A">Grade A</option>
+                  <option value="Grade B">Grade B</option>
+                  <option value="Grade C">Grade C</option>
+                </select>
+              </div>
+              <button type="submit" disabled={creatingListing} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg transition disabled:opacity-60 text-sm">
+                {creatingListing ? "Publishing…" : "Publish to Marketplace"}
+              </button>
+              {listingError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3 rounded-xl">⚠️ {listingError}</div>}
+            </form>
+          </div>
+
+          <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-3">
+            <h3 className="text-lg font-black text-gray-900 border-b pb-2.5">📋 Your Active Listings</h3>
+            {listings.length === 0 && <p className="text-sm text-gray-500">No listings yet — publish one to appear in every buyer's Marketplace feed.</p>}
+            {listings.map((l) => (
+              <div key={l.id} className="p-4 rounded-xl border border-gray-200 bg-gray-50/50 flex justify-between items-center flex-wrap gap-2">
+                <div>
+                  <div className="font-black text-gray-900">{l.crop_name} <span className="text-xs font-semibold text-gray-500">({l.variety})</span></div>
+                  <div className="text-xs text-gray-600">{l.quantity_kg} kg • {l.quality_grade} • {l.district}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-black text-emerald-700">₹{l.price_per_kg}/kg</div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${l.status === "LISTED" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{l.status}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Tab 4: Direct Buyer Offers & Escrow */}

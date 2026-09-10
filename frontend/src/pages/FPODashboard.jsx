@@ -7,14 +7,13 @@ export default function FPODashboard() {
   const [pools, setPools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [newMemberName, setNewMemberName] = useState("");
+  const [newMemberPhone, setNewMemberPhone] = useState("");
   const [newMemberQty, setNewMemberQty] = useState(250);
   const [selectedPoolForMember, setSelectedPoolForMember] = useState(null);
 
   // New pool modal
   const [showCreatePool, setShowCreatePool] = useState(false);
   const [poolForm, setPoolForm] = useState({
-    fpo_name: "Pragati Kisan Producer Co-op",
     crop_name: "Wheat",
     variety: "Sharbati Gold",
     district: "Ujjain",
@@ -39,11 +38,11 @@ export default function FPODashboard() {
   }, []);
 
   const handleAddMember = async (poolId) => {
-    if (!newMemberName) return;
+    if (!newMemberPhone) return;
     setError(null);
     try {
-      await addFPOPoolMember(poolId, { farmer_name: newMemberName, quantity_kg: Number(newMemberQty) });
-      setNewMemberName("");
+      await addFPOPoolMember(poolId, { farmer_phone: newMemberPhone, quantity_kg: Number(newMemberQty) });
+      setNewMemberPhone("");
       setSelectedPoolForMember(null);
       loadPools();
     } catch (err) {
@@ -199,11 +198,11 @@ export default function FPODashboard() {
                 <div className="flex gap-2 items-center">
                   <input
                     type="text"
-                    placeholder={t("fpo.farmerNamePlaceholder")}
-                    value={selectedPoolForMember === pool.id ? newMemberName : ""}
+                    placeholder="Registered farmer's mobile number"
+                    value={selectedPoolForMember === pool.id ? newMemberPhone : ""}
                     onChange={(e) => {
                       setSelectedPoolForMember(pool.id);
-                      setNewMemberName(e.target.value);
+                      setNewMemberPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
                     }}
                     className="text-xs border border-gray-300 rounded-xl px-3 py-2 w-48 focus:outline-none"
                   />

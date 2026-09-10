@@ -25,12 +25,8 @@ try:
         DEBUG: bool = True
         DATABASE_URL: str = "sqlite:///./kisansetu.db"
         REDIS_URL: str = "redis://localhost:6379/0"
-        SUPABASE_URL: str = ""
-        SUPABASE_ANON_KEY: str = ""
-        SUPABASE_SERVICE_ROLE_KEY: str = ""
-        JWT_SECRET: str = "change-me-in-prod"
-        JWT_ALGORITHM: str = "HS256"
-        JWT_EXPIRE_MINUTES: int = 60 * 24
+        FIREBASE_PROJECT_ID: str = ""
+        GOOGLE_APPLICATION_CREDENTIALS: str = ""
         GEMINI_API_KEY: str = ""
         BHASHINI_API_KEY: str = ""
         BHASHINI_USER_ID: str = ""
@@ -50,12 +46,8 @@ except Exception:
         DEBUG = os.getenv("DEBUG", "true").lower() == "true"
         DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./kisansetu.db")
         REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-        SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
-        SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
-        JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-prod")
-        JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-        JWT_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+        FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
+        GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
         BHASHINI_API_KEY = os.getenv("BHASHINI_API_KEY", "")
         BHASHINI_USER_ID = os.getenv("BHASHINI_USER_ID", "")

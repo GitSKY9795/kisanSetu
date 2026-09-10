@@ -8,6 +8,7 @@ import {
   getBuyerTrust,
 } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const CROPS_OPTIONS = [
   { value: "Wheat", label: "Wheat (गेहूँ)" },
@@ -23,7 +24,7 @@ const CROPS_OPTIONS = [
 
 export default function BuyerDashboard() {
   const { t } = useLanguage();
-  const [category, setCategory] = useState("Processor");
+  const { profile } = useAuth();
   const [requirements, setRequirements] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [trustProfile, setTrustProfile] = useState(null);
@@ -33,7 +34,6 @@ export default function BuyerDashboard() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   const [form, setForm] = useState({
-    buyer_name: "AgriCorp Processing Ltd",
     crop_name: "Wheat",
     quantity_kg: 2000,
     target_price: 26.0,
@@ -42,11 +42,8 @@ export default function BuyerDashboard() {
 
   const loadAll = () => {
     setLoading(true);
-    Promise.all([
-      listBuyerRequirements(),
-      listTransactions(),
-      getBuyerTrust("AgriCorp Processing Ltd"),
-    ])
+    const trustCall = profile?.id ? getBuyerTrust(profile.id) : Promise.resolve(null);
+    Promise.all([listBuyerRequirements(), listTransactions(), trustCall])
       .then(([reqs, txns, trust]) => {
         setRequirements(reqs || []);
         setTransactions(txns || []);
@@ -58,7 +55,7 @@ export default function BuyerDashboard() {
 
   useEffect(() => {
     loadAll();
-  }, []);
+  }, [profile?.id]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -66,8 +63,6 @@ export default function BuyerDashboard() {
     setError(null);
     try {
       await createBuyerRequirement({
-        buyer_name: form.buyer_name,
-        buyer_category: category,
         crop_name: form.crop_name,
         quantity_kg: Number(form.quantity_kg),
         target_price_per_kg: Number(form.target_price),
@@ -107,8 +102,8 @@ export default function BuyerDashboard() {
           <span className="bg-amber-400 text-slate-950 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
             {t("buyer.title")}
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">AgriCorp Processing Ltd</h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1 font-medium">{t("buyer.subtitle")}</p>
+          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">{profile?.organization || profile?.name || "Your Buyer Account"}</h1>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1 font-medium">{t("buyer.subtitle")} • {profile?.buyer_category}</p>
         </div>
 
         {trustProfile && (
@@ -131,29 +126,8 @@ export default function BuyerDashboard() {
             <span>📋</span> {t("buyer.postRequirement")}
           </h3>
           <form onSubmit={handleCreate} className="space-y-3.5 text-xs font-semibold">
-            <div>
-              <label className="block text-gray-700 font-bold mb-1">{t("buyer.buyerName")}</label>
-              <input
-                type="text"
-                value={form.buyer_name}
-                onChange={(e) => setForm({ ...form, buyer_name: e.target.value })}
-                className="w-full border border-gray-300 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-gray-700 font-bold mb-1">{t("buyer.buyerCategory")}</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl p-2.5 bg-gray-50 font-bold focus:outline-none"
-              >
-                <option value="Processor">Food Processor (प्रोसेसर)</option>
-                <option value="Wholesaler">Wholesaler (थोक विक्रेता)</option>
-                <option value="Retailer">Retail Chain (रिटेलर)</option>
-                <option value="Institutional">Institutional Buyer (संस्थागत)</option>
-                <option value="Bulk">Bulk Exporter (थोक निर्यातक)</option>
-              </select>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-600">
+              Posting as <span className="font-black text-gray-900">{profile?.organization || profile?.name}</span> ({profile?.buyer_category})
             </div>
             <div>
               <label className="block text-gray-700 font-bold mb-1">{t("buyer.requiredCrop")}</label>

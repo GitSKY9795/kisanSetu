@@ -26,7 +26,10 @@ def load_model(crop_name: str):
     path = _model_path(crop_name)
     if not path.exists():
         return None
-    from prophet.serialize import model_from_json
+    try:
+        from prophet.serialize import model_from_json
+    except ImportError:
+        return None  # prophet not installed — caller falls back to the naive forecast
 
     with open(path) as f:
         return model_from_json(json.load(f))

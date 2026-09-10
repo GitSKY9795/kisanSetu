@@ -9,7 +9,8 @@ from app.core.database import Base
 
 
 class CropListing(Base):
-    """A farmer's produce lot available for sale — the unit the Sell-Decision AI reasons about."""
+    """A farmer's produce lot available for sale — the unit the Sell-Decision AI reasons about,
+    and the unit buyers browse/offer on in the Marketplace."""
 
     __tablename__ = "crop_listings"
 
@@ -21,10 +22,15 @@ class CropListing(Base):
     )
     farmer: Mapped["Farmer"] = relationship()  # noqa: F821
 
-    crop_name: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "onion", "cotton"
+    crop_name: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "Onion", "Cotton"
+    variety: Mapped[str] = mapped_column(String, default="Standard")
     quantity_kg: Mapped[float] = mapped_column(Float, nullable=False)
-    quality_grade: Mapped[str] = mapped_column(String, nullable=True)  # from YOLOv8 grading
-    harvest_date: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    price_per_kg: Mapped[float] = mapped_column(Float, nullable=False)  # farmer's asking price
+    quality_grade: Mapped[str] = mapped_column(String, default="Grade A")  # from YOLOv8 grading
+    district: Mapped[str] = mapped_column(String, nullable=True)
+    state: Mapped[str] = mapped_column(String, nullable=True)
+    storage_available_kg: Mapped[float] = mapped_column(Float, default=0.0)
+    harvest_date: Mapped[str] = mapped_column(String, nullable=True)
 
     # Latest AI recommendation snapshot (also computed live via /decision)
     recommended_action: Mapped[str] = mapped_column(String, nullable=True)  # SELL/WAIT/STORE/AGGREGATE

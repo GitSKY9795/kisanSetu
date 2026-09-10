@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { listMarketplaceListings, submitMarketplaceOffer, createTransaction } from "../api/client.js";
+import { listMarketplaceListings, submitMarketplaceOffer } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Marketplace() {
   const { t } = useLanguage();
+  const { role, profile } = useAuth();
   const [filterCrop, setFilterCrop] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [listings, setListings] = useState([]);
@@ -12,8 +14,6 @@ export default function Marketplace() {
 
   // Offer Modal State
   const [selectedListing, setSelectedListing] = useState(null);
-  const [buyerName, setBuyerName] = useState("AgriCorp Processing Ltd");
-  const [buyerCategory, setBuyerCategory] = useState("Processor");
   const [offeredPrice, setOfferedPrice] = useState("");
   const [offerQty, setOfferQty] = useState("");
   const [offerTerms, setOfferTerms] = useState("Farmgate pickup within 48h. Instant UPI escrow release on quality pass.");
@@ -61,29 +61,12 @@ export default function Marketplace() {
     try {
       await submitMarketplaceOffer({
         listing_id: selectedListing.id,
-        crop_name: selectedListing.crop_name,
-        farmer_name: selectedListing.seller_name,
-        buyer_name: buyerName,
-        buyer_category: buyerCategory,
         quantity_kg: Number(offerQty),
-        asking_price_per_kg: Number(selectedListing.price_per_kg),
         offered_price_per_kg: Number(offeredPrice),
         terms: offerTerms,
       });
 
-      // Also create milestone escrow order
-      await createTransaction({
-        farmer_name: selectedListing.seller_name,
-        buyer_name: buyerName,
-        crop_name: selectedListing.crop_name,
-        quality_grade: selectedListing.quality_grade || "Grade A",
-        quantity_kg: Number(offerQty),
-        agreed_price_per_kg: Number(offeredPrice),
-        transport_cost_per_kg: 1.0,
-        storage_cost_per_kg: 0.0,
-      });
-
-      setSuccessMsg(`Offer & 4-Stage Escrow order created successfully for ${selectedListing.crop_name}!`);
+      setSuccessMsg(`Offer sent to ${selectedListing.seller_name} for ${selectedListing.crop_name}! They'll accept it to lock in the escrow order.`);
       setTimeout(() => {
         setSelectedListing(null);
         setSuccessMsg(null);
@@ -194,21 +177,17 @@ export default function Marketplace() {
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-              <button
-                onClick={() => handleOpenOfferModal(item)}
-                className="w-full bg-white border-2 border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-black py-2 rounded-xl text-xs transition"
-              >
-                {t("marketplace.makeOffer")}
-              </button>
-              <button
-                onClick={() => handleOpenOfferModal(item)}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2 rounded-xl text-xs shadow transition"
-              >
-                {t("marketplace.buyNow")}
-              </button>
-            </div>
+            {/* Action Buttons — only buyers can offer */}
+            {role === "BUYER" && (
+              <div className="pt-2 border-t">
+                <button
+                  onClick={() => handleOpenOfferModal(item)}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2 rounded-xl text-xs shadow transition"
+                >
+                  {t("marketplace.makeOffer")}
+                </button>
+              </div>
+            )}
           </div>
         ))}
 
@@ -249,30 +228,8 @@ export default function Marketplace() {
               </div>
             ) : (
               <form onSubmit={handleSendOffer} className="space-y-3.5 text-xs font-semibold">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-gray-700 font-bold mb-1">Your Enterprise Name</label>
-                    <input
-                      type="text"
-                      value={buyerName}
-                      onChange={(e) => setBuyerName(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl p-2.5"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-700 font-bold mb-1">Category</label>
-                    <select
-                      value={buyerCategory}
-                      onChange={(e) => setBuyerCategory(e.target.value)}
-                      className="w-full border border-gray-300 rounded-xl p-2.5 bg-gray-50"
-                    >
-                      <option value="Processor">Food Processor</option>
-                      <option value="Wholesaler">Wholesaler</option>
-                      <option value="Retailer">Retail Chain</option>
-                      <option value="Exporter">Bulk Exporter</option>
-                    </select>
-                  </div>
+                <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-600">
+                  Offering as <span className="font-black text-gray-900">{profile?.organization || profile?.name}</span> ({profile?.buyer_category})
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

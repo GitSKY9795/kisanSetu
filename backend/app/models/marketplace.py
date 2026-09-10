@@ -55,15 +55,17 @@ class BuyerRequirement(Base):
     )
     crop_name: Mapped[str] = mapped_column(String, nullable=False)
     quantity_kg: Mapped[float] = mapped_column(Float, nullable=False)
-    quality_grade: Mapped[str] = mapped_column(String, default="A")
+    quality_grade: Mapped[str] = mapped_column(String, default="Grade A")
     target_price_per_kg: Mapped[float] = mapped_column(Float, nullable=False)
-    delivery_location: Mapped[str] = mapped_column(String, nullable=False)
+    district: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, default="ACTIVE")  # ACTIVE, FULFILLED, CLOSED
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+    buyer: Mapped["Buyer"] = relationship("Buyer")  # noqa: F821
+
 
 class Offer(Base):
-    """Negotiation offer between buyer and seller/FPO."""
+    """Negotiation offer between buyer and seller/FPO, tied to a marketplace listing."""
 
     __tablename__ = "offers"
 
@@ -79,7 +81,15 @@ class Offer(Base):
     fpo_pool_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("fpo_pools.id"), nullable=True
     )
+    asking_price_per_kg: Mapped[float] = mapped_column(Float, nullable=True)
     offered_price_per_kg: Mapped[float] = mapped_column(Float, nullable=False)
     offered_quantity_kg: Mapped[float] = mapped_column(Float, nullable=False)
-    status: Mapped[str] = mapped_column(String, default="PENDING")  # PENDING, ACCEPTED, REJECTED
+    terms: Mapped[str] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="OFFER_SUBMITTED")
+    # OFFER_SUBMITTED, COUNTER_OFFERED, ACCEPTED, REJECTED
+    escrow_status: Mapped[str] = mapped_column(String, default="ESCROW_PREAUTH_READY")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    buyer: Mapped["Buyer"] = relationship("Buyer")  # noqa: F821
+    crop_listing: Mapped["CropListing | None"] = relationship("CropListing")  # noqa: F821
+    fpo_pool: Mapped["FPOPool | None"] = relationship("FPOPool")  # noqa: F821

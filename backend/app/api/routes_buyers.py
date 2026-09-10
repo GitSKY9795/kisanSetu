@@ -1,57 +1,23 @@
 """
-Buyer Management, Purchase Requirements, & Offer Negotiation API Routes.
-Supports buyer categories: Retailer, Wholesaler, Processor, Institutional Buyer, Bulk Buyer.
+Buyer Purchase Requirements API Routes.
+Supports buyer categories: Retailer, Wholesaler, Processor, Institutional Buyer, Bulk Buyer
+(the category itself lives on the Buyer profile, set at registration).
+Negotiation offers against a specific listing/pool live in routes_marketplace.py.
 """
-import uuid
-from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.deps import get_current_user, require_role
+from app.models.buyer import Buyer
+from app.models.marketplace import BuyerRequirement
+from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/buyers", tags=["buyers"])
 
-BUYER_REQUIREMENTS_DB = [
-    {
-        "id": "req-201",
-        "buyer_name": "AgriCorp Processing Ltd",
-        "buyer_category": "Processor",
-        "crop_name": "Wheat",
-        "quantity_kg": 5000.0,
-        "quality_grade": "Grade A",
-        "target_price_per_kg": 26.0,
-        "district": "Ujjain",
-        "status": "ACTIVE",
-        "created_at": datetime.utcnow().isoformat(),
-    },
-    {
-        "id": "req-202",
-        "buyer_name": "FreshMarts Retail",
-        "buyer_category": "Retailer",
-        "crop_name": "Onion",
-        "quantity_kg": 1500.0,
-        "quality_grade": "Grade A",
-        "target_price_per_kg": 34.0,
-        "district": "Nashik",
-        "status": "ACTIVE",
-        "created_at": datetime.utcnow().isoformat(),
-    },
-]
-
-OFFERS_DB = [
-    {
-        "id": "off-301",
-        "buyer_name": "AgriCorp Processing Ltd",
-        "target_listing_id": "list-101",
-        "offered_price_per_kg": 25.50,
-        "offered_quantity_kg": 500.0,
-        "status": "PENDING",
-        "created_at": datetime.utcnow().isoformat(),
-    }
-]
-
 
 class RequirementCreate(BaseModel):
-    buyer_name: str
-    buyer_category: str = "Wholesaler"  # Retailer, Wholesaler, Processor, Institutional, Bulk
     crop_name: str
     quantity_kg: float
     quality_grade: str = "Grade A"
@@ -59,60 +25,54 @@ class RequirementCreate(BaseModel):
     district: str = "Central"
 
 
-class OfferCreate(BaseModel):
-    buyer_name: str
-    target_id: str
-    offered_price_per_kg: float
-    offered_quantity_kg: float
-
-
-@router.get("/requirements")
-def list_buyer_requirements(crop: str | None = None, category: str | None = None):
-    """List purchase requirements posted by buyers."""
-    results = BUYER_REQUIREMENTS_DB
-    if crop:
-        results = [r for r in results if r["crop_name"].lower() == crop.lower()]
-    if category:
-        results = [r for r in results if r["buyer_category"].lower() == category.lower()]
-    return results
-
-
-@router.post("/requirements")
-def create_buyer_requirement(req: RequirementCreate):
-    """Post a new crop purchase requirement."""
-    new_req = {
-        "id": f"req-{uuid.uuid4().hex[:6]}",
-        "buyer_name": req.buyer_name,
-        "buyer_category": req.buyer_category,
+def _requirement_dict(req: BuyerRequirement) -> dict:
+    return {
+        "id": str(req.id),
+        "buyer_id": str(req.buyer_id),
+        "buyer_name": req.buyer.name,
+        "buyer_category": req.buyer.buyer_category,
         "crop_name": req.crop_name,
         "quantity_kg": req.quantity_kg,
         "quality_grade": req.quality_grade,
         "target_price_per_kg": req.target_price_per_kg,
         "district": req.district,
-        "status": "ACTIVE",
-        "created_at": datetime.utcnow().isoformat(),
+        "status": req.status,
+        "created_at": req.created_at.isoformat(),
     }
-    BUYER_REQUIREMENTS_DB.append(new_req)
-    return new_req
 
 
-@router.get("/offers")
-def list_buyer_offers():
-    """List submitted negotiation offers."""
-    return OFFERS_DB
+@router.get("/requirements")
+def list_buyer_requirements(
+    crop: str | None = None,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List active purchase requirements posted by buyers — visible to farmers/FPOs too."""
+    query = db.query(BuyerRequirement).filter(BuyerRequirement.status == "ACTIVE")
+    if crop:
+        query = query.filter(BuyerRequirement.crop_name.ilike(crop))
+    rows = query.order_by(BuyerRequirement.created_at.desc()).all()
+    return [_requirement_dict(r) for r in rows]
 
 
-@router.post("/offers")
-def submit_buyer_offer(req: OfferCreate):
-    """Submit a price/quantity offer to a farmer listing or FPO pool."""
-    new_offer = {
-        "id": f"off-{uuid.uuid4().hex[:6]}",
-        "buyer_name": req.buyer_name,
-        "target_id": req.target_id,
-        "offered_price_per_kg": req.offered_price_per_kg,
-        "offered_quantity_kg": req.offered_quantity_kg,
-        "status": "PENDING",
-        "created_at": datetime.utcnow().isoformat(),
-    }
-    OFFERS_DB.append(new_offer)
-    return new_offer
+@router.post("/requirements")
+def create_buyer_requirement(
+    req: RequirementCreate,
+    user: User = Depends(require_role(UserRole.BUYER)),
+    db: Session = Depends(get_db),
+):
+    """Post a new crop purchase requirement under the logged-in buyer's account."""
+    buyer = db.query(Buyer).filter(Buyer.user_id == user.id).first()
+    requirement = BuyerRequirement(
+        buyer_id=buyer.id,
+        crop_name=req.crop_name,
+        quantity_kg=req.quantity_kg,
+        quality_grade=req.quality_grade,
+        target_price_per_kg=req.target_price_per_kg,
+        district=req.district,
+        status="ACTIVE",
+    )
+    db.add(requirement)
+    db.commit()
+    db.refresh(requirement)
+    return _requirement_dict(requirement)

@@ -16,7 +16,6 @@ dist/
 .env.local
 
 # Secrets — service account keys must never be committed
-backend-node/*.json
 **/*firebase-adminsdk*.json
 **/serviceAccountKey.json
 

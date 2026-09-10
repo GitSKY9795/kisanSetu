@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,9 +14,13 @@ class Buyer(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    supabase_user_id: Mapped[str] = mapped_column(String, unique=True, nullable=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     organization: Mapped[str] = mapped_column(String, nullable=True)
+    buyer_category: Mapped[str] = mapped_column(String, default="Wholesaler")
+    # Retailer, Wholesaler, Processor, Institutional, Bulk
     phone: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     district: Mapped[str] = mapped_column(String, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=True)

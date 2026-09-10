@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { ROLE_HOME } from "../components/ProtectedRoute.jsx";
 import { auth, getFirebaseOtpError } from "../firebase.js";
-import { createApplicationSession, getApplicationSession } from "../api/client.js";
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { lang, setLang, t } = useLanguage();
+  const { firebaseUser, role, loading, refresh } = useAuth();
   const [mobile, setMobile] = useState("");
   const [otp, setOtp] = useState("");
   const [confirmation, setConfirmation] = useState(null);
@@ -18,12 +20,9 @@ export default function Login() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    let active = true;
-    getApplicationSession()
-      .then(() => { if (active) navigate("/home", { replace: true }); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [navigate]);
+    if (loading || !firebaseUser) return;
+    navigate(role ? ROLE_HOME[role] || "/home" : "/register", { replace: true });
+  }, [loading, firebaseUser, role, navigate]);
 
   const resetRecaptcha = () => {
     if (window.loginRecaptchaVerifier) {
@@ -71,11 +70,10 @@ export default function Login() {
       return;
     }
     try {
-      const firebaseToken = await auth.currentUser.getIdToken();
-      await createApplicationSession(firebaseToken);
-      navigate("/home", { replace: true });
+      const me = await refresh();
+      navigate(me?.role ? ROLE_HOME[me.role] || "/home" : "/register", { replace: true });
     } catch (sessionError) {
-      setError(sessionError?.response?.data?.error || "OTP verified, but your application session could not be created. Check the backend configuration.");
+      setError(sessionError?.response?.data?.detail || "OTP verified, but we couldn't reach the KisanSetu backend. Check that it's running.");
     } finally {
       setBusy(false);
     }

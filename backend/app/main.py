@@ -17,6 +17,10 @@ from app.api import (
     routes_transactions,
 )
 from app.core.config import settings
+from app.core.database import Base, engine
+import app.models  # noqa: F401 — registers every model on Base.metadata before create_all
+
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.APP_NAME,

@@ -1,9 +1,7 @@
-import { useEffect, useState } from "react";
 import { NavLink, Link, useNavigate } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext.jsx";
-import { getApplicationSession, logoutApplicationSession } from "../api/client.js";
-import { auth } from "../firebase.js";
-import { signOut } from "firebase/auth";
+import { useAuth } from "../context/AuthContext.jsx";
+import { ROLE_HOME } from "./ProtectedRoute.jsx";
 
 const navLinkClass = ({ isActive }) =>
   `px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
@@ -12,18 +10,34 @@ const navLinkClass = ({ isActive }) =>
       : "text-emerald-100/90 hover:text-white hover:bg-emerald-900/50"
   }`;
 
+const ROLE_AVATAR = { FARMER: "👨🏽‍🌾", BUYER: "🏬", FPO: "🤝", ADMIN: "⚙️" };
+
+function linksForRole(role, t) {
+  const dashboard = { to: ROLE_HOME[role] || "/home", icon: ROLE_AVATAR[role] || "🏠", label: t("nav.home") };
+  const common = [
+    { to: "/marketplace", icon: "🛒", label: t("nav.marketplace") },
+    { to: "/grievances", icon: "⚖️", label: t("nav.grievances") },
+  ];
+  if (role === "ADMIN") return [dashboard, ...common];
+  return [
+    dashboard,
+    ...(role === "FARMER" ? [{ to: "/farmer/profile", icon: "👤", label: "My Profile" }] : []),
+    { to: "/prices", icon: "📈", label: t("nav.prices") },
+    { to: "/logistics", icon: "🏬", label: t("nav.logistics") },
+    ...common,
+  ];
+}
+
 export default function Navbar() {
   const { lang, setLang, t, languages } = useLanguage();
   const navigate = useNavigate();
-  const [farmerName, setFarmerName] = useState("Farmer");
+  const { role, profile, logout } = useAuth();
 
-  useEffect(() => {
-    getApplicationSession().then((session) => setFarmerName(session.farmer?.full_name || "Farmer")).catch(() => {});
-  }, []);
+  const links = role ? linksForRole(role, t) : [];
+  const displayName = profile?.name || profile?.organization || "Account";
 
   const handleLogout = async () => {
-    await logoutApplicationSession().catch(() => {});
-    await signOut(auth).catch(() => {});
+    await logout();
     navigate("/login", { replace: true });
   };
 
@@ -31,7 +45,7 @@ export default function Navbar() {
     <nav className="bg-emerald-950 border-b border-emerald-800/80 text-white sticky top-0 z-40 shadow-lg backdrop-blur-md bg-opacity-95">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
         {/* Brand Logo & Name */}
-        <Link to="/home" className="font-black text-xl tracking-tight flex items-center gap-2.5 group shrink-0">
+        <Link to={ROLE_HOME[role] || "/login"} className="font-black text-xl tracking-tight flex items-center gap-2.5 group shrink-0">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-amber-400 flex items-center justify-center text-xl shadow-md group-hover:scale-105 transition">
             🌾
           </div>
@@ -42,42 +56,11 @@ export default function Navbar() {
 
         {/* Organized Center Nav Links */}
         <div className="hidden lg:flex items-center gap-1 overflow-x-auto">
-          <NavLink to="/home" end className={navLinkClass}>
-            <span>🏠</span> {t("nav.home")}
-          </NavLink>
-          <NavLink to="/farmer" className={navLinkClass}>
-            <span>👨‍🌾</span> {t("nav.farmer")}
-          </NavLink>
-          <NavLink to="/farmer" className={navLinkClass}>
-            <span>👤</span> My Profile
-          </NavLink>
-          <NavLink to="/marketplace" className={navLinkClass}>
-            <span>📋</span> My Listings
-          </NavLink>
-          <NavLink to="/prices" className={navLinkClass}>
-            <span>🔔</span> Notifications
-          </NavLink>
-          <NavLink to="/buyer" className={navLinkClass}>
-            <span>🏬</span> {t("nav.buyer")}
-          </NavLink>
-          <NavLink to="/fpo" className={navLinkClass}>
-            <span>🤝</span> {t("nav.fpo")}
-          </NavLink>
-          <NavLink to="/marketplace" className={navLinkClass}>
-            <span>🛒</span> {t("nav.marketplace")}
-          </NavLink>
-          <NavLink to="/prices" className={navLinkClass}>
-            <span>📈</span> {t("nav.prices")}
-          </NavLink>
-          <NavLink to="/logistics" className={navLinkClass}>
-            <span>🏬</span> {t("nav.logistics")}
-          </NavLink>
-          <NavLink to="/grievances" className={navLinkClass}>
-            <span>⚖️</span> {t("nav.grievances")}
-          </NavLink>
-          <NavLink to="/admin" className={navLinkClass}>
-            <span>⚙️</span> {t("nav.admin")}
-          </NavLink>
+          {links.map((link) => (
+            <NavLink key={link.to} to={link.to} end={link.to === ROLE_HOME[role]} className={navLinkClass}>
+              <span>{link.icon}</span> {link.label}
+            </NavLink>
+          ))}
         </div>
 
         {/* Top Right Language Selector */}
@@ -100,39 +83,17 @@ export default function Navbar() {
           <button type="button" onClick={handleLogout} className="text-xs font-bold text-emerald-100 hover:text-white">
             Logout
           </button>
-          <Link to="/farmer" className="farmer-nav-profile"><span className="farmer-nav-avatar">👨🏽‍🌾</span><span>{farmerName}</span></Link>
+          <span className="farmer-nav-profile"><span className="farmer-nav-avatar">{ROLE_AVATAR[role] || "👤"}</span><span>{displayName}</span></span>
         </div>
       </div>
 
       {/* Mobile / Tablet Horizontal Navigation Bar */}
       <div className="lg:hidden px-4 py-2 border-t border-emerald-900/60 flex gap-1 overflow-x-auto text-xs bg-emerald-950/90">
-        <NavLink to="/home" end className={navLinkClass}>
-          <span>🏠</span> {t("nav.home")}
-        </NavLink>
-        <NavLink to="/farmer" className={navLinkClass}>
-          <span>👨‍🌾</span> {t("nav.farmer")}
-        </NavLink>
-        <NavLink to="/buyer" className={navLinkClass}>
-          <span>🏬</span> {t("nav.buyer")}
-        </NavLink>
-        <NavLink to="/fpo" className={navLinkClass}>
-          <span>🤝</span> {t("nav.fpo")}
-        </NavLink>
-        <NavLink to="/marketplace" className={navLinkClass}>
-          <span>🛒</span> {t("nav.marketplace")}
-        </NavLink>
-        <NavLink to="/prices" className={navLinkClass}>
-          <span>📈</span> {t("nav.prices")}
-        </NavLink>
-        <NavLink to="/logistics" className={navLinkClass}>
-          <span>🏬</span> {t("nav.logistics")}
-        </NavLink>
-        <NavLink to="/grievances" className={navLinkClass}>
-          <span>⚖️</span> {t("nav.grievances")}
-        </NavLink>
-        <NavLink to="/admin" className={navLinkClass}>
-          <span>⚙️</span> {t("nav.admin")}
-        </NavLink>
+        {links.map((link) => (
+          <NavLink key={link.to} to={link.to} end={link.to === ROLE_HOME[role]} className={navLinkClass}>
+            <span>{link.icon}</span> {link.label}
+          </NavLink>
+        ))}
       </div>
     </nav>
   );

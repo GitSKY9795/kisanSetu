@@ -1,6 +1,6 @@
 """
 SQLAlchemy engine + session management.
-Supports SQLite fallback for zero-setup local dev & PostgreSQL/Supabase for production.
+Supports SQLite fallback for zero-setup local dev & PostgreSQL for production.
 """
 from collections.abc import Generator
 from sqlalchemy import create_engine

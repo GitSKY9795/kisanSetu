@@ -39,13 +39,13 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram a
 | **Frontend (Web)** | React.js + Vite + Tailwind CSS |
 | **Mobile** | Flutter (Android-first) |
 | **Backend** | Python, FastAPI, SQLAlchemy, WebSockets |
-| **Database** | PostgreSQL + PostGIS, Redis, Supabase Storage |
+| **Database** | SQLite (local dev default) / PostgreSQL + PostGIS (production) |
 | **AI/ML** | Pandas, NumPy, Prophet, XGBoost, Scikit-learn, YOLOv8, SHAP |
 | **Agentic AI** | LangGraph + Gemini API (tool-calling orchestrator), **BHASHINI** (voice/ASR/NMT/TTS) |
 | **Data / External APIs** | AGMARKNET (data.gov.in), e-NAM, Open-Meteo, OpenRouteService |
-| **Background Jobs** | Celery + Redis |
-| **Payments / Auth** | Razorpay (test mode), Supabase Auth / JWT |
-| **Deployment** | GitHub Actions (CI/CD), Vercel (frontend), Render/Railway (backend), Supabase (DB/Auth/Storage) |
+| **Auth** | Firebase Authentication (phone OTP) — sole identity provider for every role (Farmer/Buyer/FPO/Admin); backend verifies ID tokens via `firebase-admin` |
+| **Payments** | Razorpay (test mode) |
+| **Deployment** | GitHub Actions (CI/CD), Vercel (frontend), Render/Railway (backend), Firebase (Auth) |
 
 No AWS — everything runs on generous free tiers so any team member can spin up the full stack locally or on a free cloud deployment.
 
@@ -55,7 +55,7 @@ No AWS — everything runs on generous free tiers so any team member can spin up
 kisansetu-ai/
 ├── backend/            # FastAPI service — APIs, ML models, agent orchestrator
 │   └── app/
-│       ├── core/        # config, db session, security/JWT
+│       ├── core/        # config, db session, Firebase auth verification + role guards
 │       ├── models/      # SQLAlchemy models (Farmer, Buyer, Crop, Transaction, FPO)
 │       ├── schemas/      # Pydantic request/response schemas
 │       ├── api/          # route handlers (auth, farmers, buyers, prices, decision, agent, transactions)
@@ -74,7 +74,7 @@ kisansetu-ai/
 
 These steps assume the setup this repo actually ships with: **SQLite locally** (no
 Docker/Postgres needed to run the prototype) and a Python venv. If you later want to
-run against Postgres/Supabase, everything is already parameterized via `DATABASE_URL`
+run against Postgres, everything is already parameterized via `DATABASE_URL`
 in `.env` — just point it at your instance.
 
 ### Prerequisites
@@ -89,6 +89,20 @@ git checkout -b feature/<your-name>-<short-topic>   # work on a feature branch, 
 cp backend/.env.example backend/.env                 # fill in optional keys later — SQLite needs none
 ```
 `.env` holds secrets and is already in `.gitignore` — never commit it.
+
+**Auth needs a Firebase service-account key** (everything else in `.env` is optional):
+1. Firebase Console → this project (`kisan-setu-3bbf5`) → ⚙️ Project Settings → Service Accounts →
+   **Generate new private key**.
+2. Save the downloaded JSON into `backend/` (e.g. `backend/firebase-adminsdk.json`) — it's
+   gitignored, never commit it.
+3. `backend/.env.example` already has `GOOGLE_APPLICATION_CREDENTIALS=./firebase-adminsdk.json`
+   pointing at that exact filename, so `cp backend/.env.example backend/.env` just works once
+   the key file is in place.
+4. To log in during local dev without sending real SMS, add a **test phone number** in
+   Firebase Console → Authentication → Sign-in method → Phone → "Phone numbers for testing"
+   (e.g. `+91 9999999999` / code `123456`).
+5. Admin accounts are seeded, not self-service: sign in once through the app as any role,
+   then run `python -m scripts.promote_admin --phone <phone>` (see 5.3) to flip that account to ADMIN.
 
 ### 5.2 macOS system dependency: libomp (required by XGBoost)
 ```bash
@@ -116,8 +130,11 @@ python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"   # ~5–10 min, one-t
 Now seed some demo data and run the test suite as a sanity check:
 ```bash
 python -m scripts.seed_data       # seeds a demo farmer/buyers/FPO pool/listing into SQLite
-python -m pytest tests/ -q        # should show: 16 passed
+python -m pytest tests/ -q        # should show: 23 passed
 ```
+The seeded profiles are browsing data only (placeholder Firebase UIDs) — you can't log in
+as them. To exercise the real flow, sign in through the app UI and register a role; see
+`backend/scripts/promote_admin.py` to make any signed-in account an ADMIN.
 
 Generate synthetic training data and train the ML models (optional — the app runs
 fine with rule-based fallbacks if you skip this, but training gives you the real
@@ -134,12 +151,14 @@ uvicorn app.main:app --reload --port 8000
 ```
 API docs (interactive) at `http://localhost:8000/docs`. Health check at `/health`.
 
-> **What needs an API key vs. what doesn't:** every route in `docs/API_ENDPOINTS.md`
-> works out of the box with no keys — services fall back to realistic simulated data
-> (weather, demand, mandi prices, quality grading) when an external API key isn't set.
-> The one thing that needs `GEMINI_API_KEY` in `.env` to give real LLM answers is the
-> agentic assistant (`app/agents/orchestrator.py`); without it, `/agent/query` still
-> responds using its rule-based tool-calling fallback, so the UI keeps working.
+> **What needs an API key vs. what doesn't:** authentication needs the Firebase
+> service-account key from 5.1 — every role signs in through it, so nothing role-specific
+> works without it. Every other route in `docs/API_ENDPOINTS.md` works out of the box with
+> no keys — services fall back to realistic simulated data (weather, demand, mandi prices,
+> quality grading) when an external API key isn't set. The one thing that needs
+> `GEMINI_API_KEY` in `.env` to give real LLM answers is the agentic assistant
+> (`app/agents/orchestrator.py`); without it, `/agent/query` still responds using its
+> rule-based tool-calling fallback, so the UI keeps working.
 
 ### 5.4 Frontend
 ```bash
@@ -165,6 +184,8 @@ See [`mobile/README.md`](mobile/README.md) — optional, not required to explore
 | Training `train_price_model.py` fails / very slow | Make sure `cmdstanpy.install_cmdstan()` finished successfully first (5.3). First fit per crop is slower; subsequent ones are faster. |
 | Frontend pages show "Could not reach the KisanSetu backend" | Make sure `uvicorn` is running on port 8000 in another terminal, and `frontend/.env` has `VITE_API_BASE_URL=http://localhost:8000` |
 | `sqlite3.OperationalError` on a fresh clone | Delete `backend/kisansetu.db` if present and re-run `python -m scripts.seed_data` — SQLite will recreate all tables automatically on first import of `app.core.database` |
+| Login/register calls return `503 Firebase Admin credentials are not configured` | `GOOGLE_APPLICATION_CREDENTIALS` in `backend/.env` isn't pointing at a real key file — redo step 5.1 |
+| OTP never arrives | Real SMS needs a real phone + Firebase's phone-auth billing quota; for local dev, add a Firebase test phone number instead (5.1, step 4) |
 
 ## 7. Team & Ownership
 

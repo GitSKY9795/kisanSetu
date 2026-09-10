@@ -1,5 +1,6 @@
-# Local dev infra only — for real deployment we use Supabase (DB/Auth/Storage)
-# and a managed Redis (Upstash/Render), not this compose file.
+# Optional local infra — the app runs fine on the default SQLite DB with no Docker at
+# all. Use this only if you want Postgres/PostGIS + Redis locally instead. Auth is
+# Firebase (see backend/.env.example), not part of this compose file.
 services:
   postgres:
     image: postgis/postgis:16-3.4

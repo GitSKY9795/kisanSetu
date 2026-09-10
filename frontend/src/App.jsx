@@ -1,7 +1,8 @@
-import { useEffect } from "react";
-import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, Navigate, Routes, Route } from "react-router-dom";
 import Navbar from "./components/Navbar.jsx";
-import FarmerDashboard from "./pages/FarmerOverview.jsx";
+import ProtectedRoute, { ROLE_HOME } from "./components/ProtectedRoute.jsx";
+import FarmerOverview from "./pages/FarmerOverview.jsx";
+import FarmerDashboard from "./pages/FarmerDashboard.jsx";
 import BuyerDashboard from "./pages/BuyerDashboard.jsx";
 import FPODashboard from "./pages/FPODashboard.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
@@ -10,31 +11,23 @@ import PriceTrends from "./pages/PriceTrends.jsx";
 import LogisticsStorage from "./pages/LogisticsStorage.jsx";
 import GrievancePortal from "./pages/GrievancePortal.jsx";
 import Login from "./pages/Login.jsx";
-import FarmerRegistration from "./pages/FarmerRegistration.jsx";
+import Register from "./pages/Register.jsx";
 import AgentAssistantModal from "./components/AgentAssistantModal.jsx";
 import FloatingAssistantButton from "./components/FloatingAssistantButton.jsx";
 import { useAssistant } from "./context/AssistantContext.jsx";
-import { getApplicationSession } from "./api/client.js";
+import { useAuth } from "./context/AuthContext.jsx";
+
+function RoleHomeRedirect() {
+  const { role } = useAuth();
+  return <Navigate to={(role && ROLE_HOME[role]) || "/login"} replace />;
+}
+
+const ANY_ROLE = ["FARMER", "BUYER", "FPO", "ADMIN"];
 
 export default function App() {
   const { isOpen, closeAssistant } = useAssistant();
   const { pathname } = useLocation();
-  const navigate = useNavigate();
   const isPublicRoute = pathname === "/" || pathname === "/login" || pathname === "/register";
-
-  useEffect(() => {
-    if (isPublicRoute) return undefined;
-    const checkSession = () => {
-      getApplicationSession().catch((error) => {
-        if (error?.response?.status === 401) {
-          navigate("/login", { replace: true, state: { sessionExpired: "Your session has expired. Please login again." } });
-        }
-      });
-    };
-    checkSession();
-    const timer = window.setInterval(checkSession, 60000);
-    return () => window.clearInterval(timer);
-  }, [isPublicRoute, navigate]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900 font-sans flex flex-col justify-between">
@@ -44,17 +37,21 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<FarmerRegistration />} />
-            <Route path="/home" element={<FarmerDashboard />} />
-            <Route path="/farmer" element={<FarmerDashboard />} />
-            <Route path="/buyer" element={<BuyerDashboard />} />
-            <Route path="/fpo" element={<FPODashboard />} />
-            <Route path="/marketplace" element={<Marketplace />} />
-            <Route path="/prices" element={<PriceTrends />} />
-            <Route path="/prices/:crop" element={<PriceTrends />} />
-            <Route path="/logistics" element={<LogisticsStorage />} />
-            <Route path="/grievances" element={<GrievancePortal />} />
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/register" element={<Register />} />
+
+            <Route path="/home" element={<ProtectedRoute role={ANY_ROLE}><RoleHomeRedirect /></ProtectedRoute>} />
+
+            <Route path="/farmer" element={<ProtectedRoute role="FARMER"><FarmerDashboard /></ProtectedRoute>} />
+            <Route path="/farmer/profile" element={<ProtectedRoute role="FARMER"><FarmerOverview /></ProtectedRoute>} />
+            <Route path="/buyer" element={<ProtectedRoute role="BUYER"><BuyerDashboard /></ProtectedRoute>} />
+            <Route path="/fpo" element={<ProtectedRoute role="FPO"><FPODashboard /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute role="ADMIN"><AdminDashboard /></ProtectedRoute>} />
+
+            <Route path="/marketplace" element={<ProtectedRoute role={ANY_ROLE}><Marketplace /></ProtectedRoute>} />
+            <Route path="/prices" element={<ProtectedRoute role={ANY_ROLE}><PriceTrends /></ProtectedRoute>} />
+            <Route path="/prices/:crop" element={<ProtectedRoute role={ANY_ROLE}><PriceTrends /></ProtectedRoute>} />
+            <Route path="/logistics" element={<ProtectedRoute role={ANY_ROLE}><LogisticsStorage /></ProtectedRoute>} />
+            <Route path="/grievances" element={<ProtectedRoute role={ANY_ROLE}><GrievancePortal /></ProtectedRoute>} />
           </Routes>
         </main>
       </div>

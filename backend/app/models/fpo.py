@@ -16,6 +16,9 @@ class FPO(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), unique=True, nullable=False
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     registration_id: Mapped[str] = mapped_column(String, nullable=True)
     district: Mapped[str] = mapped_column(String, nullable=True)
@@ -41,9 +44,12 @@ class FPOPool(Base):
     crop_name: Mapped[str] = mapped_column(String, nullable=False)
     variety: Mapped[str] = mapped_column(String, nullable=True)
     total_quantity_kg: Mapped[float] = mapped_column(Float, default=0.0)
+    target_quantity_kg: Mapped[float] = mapped_column(Float, default=10000.0)
     target_price_per_kg: Mapped[float] = mapped_column(Float, nullable=True)
+    mandi_benchmark_price_per_kg: Mapped[float] = mapped_column(Float, nullable=True)
     status: Mapped[str] = mapped_column(String, default="OPEN")  # OPEN, MATCHED, SOLD
     district: Mapped[str] = mapped_column(String, nullable=True)
+    state: Mapped[str] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     fpo: Mapped[FPO] = relationship("FPO", back_populates="pools")
@@ -68,3 +74,4 @@ class FPOPoolMember(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     pool: Mapped[FPOPool] = relationship("FPOPool", back_populates="members")
+    farmer: Mapped["Farmer"] = relationship("Farmer")

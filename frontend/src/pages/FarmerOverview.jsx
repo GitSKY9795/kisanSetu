@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { getCurrentPrice, getApplicationSession } from "../api/client.js";
+import { getCurrentPrice } from "../api/client.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 const cropSeeds = [
   { name: "Wheat", icon: "🌾", mandi: "Nearby Mandi", tone: "green", movement: [42, 44, 43, 47, 49, 52, 55] },
@@ -16,22 +17,21 @@ const recentActivity = [
 ];
 
 export default function FarmerOverview() {
-  const [farmer, setFarmer] = useState(null);
+  const { profile } = useAuth();
   const [selectedCrop, setSelectedCrop] = useState("Wheat");
   const [prices, setPrices] = useState({});
 
   useEffect(() => {
-    getApplicationSession().then((session) => setFarmer(session.farmer)).catch(() => {});
     cropSeeds.forEach((crop) => {
-      getCurrentPrice(crop.name, { district: "Ujjain" })
+      getCurrentPrice(crop.name, { district: profile?.district || "Ujjain" })
         .then((data) => setPrices((current) => ({ ...current, [crop.name]: data })))
         .catch(() => {});
     });
-  }, []);
+  }, [profile?.district]);
 
-  const displayFarmer = farmer || {
-    full_name: "Farmer profile",
-    mobile_number: "",
+  const displayFarmer = profile || {
+    name: "Farmer profile",
+    phone: "",
     village: "Your village",
     district: "Your district",
     state: "Your state",
@@ -41,15 +41,15 @@ export default function FarmerOverview() {
   };
   const selected = cropSeeds.find((crop) => crop.name === selectedCrop) || cropSeeds[0];
   const selectedPrice = prices[selected.name];
-  const completion = farmer ? 72 : 28;
-  const maskMobile = displayFarmer.mobile_number ? `${displayFarmer.mobile_number.slice(0, 3)}••••••${displayFarmer.mobile_number.slice(-2)}` : "Not added";
+  const completion = profile ? 100 : 28;
+  const maskMobile = displayFarmer.phone ? `${displayFarmer.phone.slice(0, 3)}••••••${displayFarmer.phone.slice(-2)}` : "Not added";
 
   return (
     <div className="farmer-dashboard">
       <section className="farmer-welcome">
         <div>
           <p className="dashboard-kicker">Your digital mandi companion</p>
-          <h1>Namaste, {displayFarmer.full_name} <span aria-hidden="true">👋</span></h1>
+          <h1>Namaste, {displayFarmer.name} <span aria-hidden="true">👋</span></h1>
           <p>Here&apos;s what&apos;s happening in your local agricultural market today.</p>
         </div>
         <div className="welcome-weather" aria-label="Local market status">
@@ -59,7 +59,7 @@ export default function FarmerOverview() {
 
       <section className="farmer-dashboard-grid">
         <aside className="farmer-profile-card dashboard-card">
-          <div className="profile-card-heading"><span className="profile-avatar">👨🏽‍🌾</span><div><p className="dashboard-label">Farmer profile</p><h2>{displayFarmer.full_name}</h2></div></div>
+          <div className="profile-card-heading"><span className="profile-avatar">👨🏽‍🌾</span><div><p className="dashboard-label">Farmer profile</p><h2>{displayFarmer.name}</h2></div></div>
           <div className="profile-fields">
             <ProfileField label="Mobile number" value={maskMobile} />
             <ProfileField label="Village" value={displayFarmer.village} />
@@ -70,7 +70,6 @@ export default function FarmerOverview() {
             <ProfileField label="Main crops" value={displayFarmer.main_crops || "Not added"} />
           </div>
           <div className="profile-completion"><div><span>Profile completion</span><strong>{completion}%</strong></div><div className="completion-track"><span style={{ width: `${completion}%` }} /></div></div>
-          <Link to="/register" className="outline-action">Edit Profile <span aria-hidden="true">↗</span></Link>
         </aside>
 
         <div className="dashboard-main-column">
