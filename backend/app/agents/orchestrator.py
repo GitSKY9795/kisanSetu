@@ -3,6 +3,8 @@ Agentic Orchestrator — KisanSetu's AI assistant backed by LangGraph & Gemini A
 """
 from __future__ import annotations
 
+import re
+
 from app.core.config import settings
 from app.services.decision_engine import recommend_action
 
@@ -22,7 +24,34 @@ When a farmer asks whether to sell, wait, store, or aggregate produce:
 3. State the expected NET REALIZATION per kg.
 4. Explain the key reasons simply in 2-3 short sentences.
 5. Offer helpful follow-up steps (e.g. buyer matching, FPO pooling).
+
+Reply in PLAIN TEXT only — this answer is shown in a simple text box and read aloud by
+a voice assistant, so never use Markdown. That means: no "**bold**", no "# headings",
+no "`code`", no bullet characters like "*" or "-" at the start of a line — write plain
+sentences and short paragraphs, and use a real line break between them instead.
 """
+
+
+_MARKDOWN_PATTERNS = [
+    (re.compile(r"^#{1,6}\s*", re.MULTILINE), ""),  # headings
+    (re.compile(r"\*\*(.+?)\*\*"), r"\1"),  # **bold**
+    (re.compile(r"(?<!\*)\*(?!\*)(.+?)\*(?!\*)"), r"\1"),  # *italic*
+    (re.compile(r"__(.+?)__"), r"\1"),  # __bold__
+    (re.compile(r"`([^`]+)`"), r"\1"),  # `code`
+    (re.compile(r"^[ \t]*[*\-+][ \t]+", re.MULTILINE), "• "),  # bullet markers -> a plain bullet
+]
+
+
+def strip_markdown(text: str) -> str:
+    """Defense-in-depth cleanup: LLMs don't always follow "no markdown" instructions
+    perfectly, and this text is both displayed as plain text and fed to BHASHINI TTS —
+    a stray "**" or "#" reads badly on screen and gets spoken aloud verbatim."""
+    if not text:
+        return text
+    cleaned = text
+    for pattern, replacement in _MARKDOWN_PATTERNS:
+        cleaned = pattern.sub(replacement, cleaned)
+    return cleaned.strip()
 
 
 def _build_agent():
@@ -31,7 +60,13 @@ def _build_agent():
     try:
         # gemini-1.5-flash was retired by Google; gemini-3.6-flash confirmed working
         # against the live API as of 2026-09.
-        llm = ChatGoogleGenerativeAI(model="gemini-3.6-flash", api_key=settings.GEMINI_API_KEY)
+        # max_retries=1: the free tier's daily quota (20 requests/day for this model,
+        # confirmed via a live 429 RESOURCE_EXHAUSTED response) means a rate-limited
+        # call can't succeed no matter how long it waits — the default retry policy
+        # honors Google's suggested backoff (seen up to 44s) before giving up, which
+        # made a quota-exhausted call look like a hang. Fail fast to the rule-based
+        # fallback instead of making the farmer wait through that.
+        llm = ChatGoogleGenerativeAI(model="gemini-3.6-flash", api_key=settings.GEMINI_API_KEY, max_retries=1)
         return create_react_agent(llm, AGENT_TOOLS)
     except Exception:
         return None
@@ -60,19 +95,26 @@ def _extract_text(content) -> str:
     return str(content)
 
 
-def run_agent_query(query_en: str, crop_name: str = "wheat", quantity_kg: float = 500.0, district: str = "Central") -> dict:
-    """Executes the farmer query using Gemini agent or structured deterministic tool execution."""
+async def run_agent_query(query_en: str, crop_name: str = "wheat", quantity_kg: float = 500.0, district: str = "Central") -> dict:
+    """Executes the farmer query using Gemini agent or structured deterministic tool execution.
+
+    Must stay async and use the agent's `ainvoke` — the underlying google-generativeai
+    gRPC client is bound to the event loop it was created on. Calling the sync
+    `agent.invoke()` from a worker thread (e.g. via FastAPI's run_in_threadpool, the
+    usual fix for blocking calls in an async route) deadlocks indefinitely instead of
+    erroring, which is worse than just blocking the loop — confirmed by testing both
+    directly. `ainvoke` runs correctly on the loop the route handler is already on."""
     agent = get_agent()
 
     if agent is not None:
         try:
-            result = agent.invoke(
+            result = await agent.ainvoke(
                 {"messages": [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=query_en)]}
             )
             final_message = result["messages"][-1]
             return {
                 "query": query_en,
-                "response": _extract_text(final_message.content),
+                "response": strip_markdown(_extract_text(final_message.content)),
                 "engine": "Gemini (LangGraph)",
             }
         except Exception as exc:

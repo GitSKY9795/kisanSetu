@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { askAgent } from "../api/client.js";
+import { askAgent, askAgentVoice, speakText } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAssistant } from "../context/AssistantContext.jsx";
+import { blobToWavBase64, base64ToObjectUrl } from "../utils/audioEncoding.js";
 
-const SpeechRecognitionAPI =
-  typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
-const speechSynthesisSupported = typeof window !== "undefined" && "speechSynthesis" in window;
-const voiceInputSupported = !!SpeechRecognitionAPI;
+const micSupported =
+  typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== "undefined";
 
 const ENGLISH_PROMPTS = [
   "🌾 Should I sell wheat today or store it in Ujjain?",
@@ -38,20 +37,23 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false);
 
   // Voice state
-  const [isListening, setIsListening] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
-  const recognitionRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const audioElRef = useRef(null);
+  const objectUrlRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
-      setMode(initialMode === "text" || !voiceInputSupported ? "text" : "voice");
+      setMode(initialMode === "text" || !micSupported ? "text" : "voice");
       setMessages([{ sender: "agent", text: t("assistant.greeting") }]);
     } else {
-      recognitionRef.current?.abort?.();
-      window.speechSynthesis?.cancel?.();
-      setIsListening(false);
+      mediaRecorderRef.current?.stream?.getTracks().forEach((track) => track.stop());
+      audioElRef.current?.pause();
+      setIsRecording(false);
       setIsSpeaking(false);
       setLiveTranscript("");
     }
@@ -60,6 +62,12 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, liveTranscript]);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    };
+  }, []);
 
   const context = useMemo(
     () => ({
@@ -76,16 +84,34 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const speak = (text) => {
-    if (!speechSynthesisSupported || !text) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = currentLanguage.speechLang;
-    utterance.rate = 1.0;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
+  const playAudio = (audioBase64) => {
+    if (!audioBase64) return;
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = base64ToObjectUrl(audioBase64, "audio/wav");
+    objectUrlRef.current = url;
+    const audio = new Audio(url);
+    audioElRef.current = audio;
+    audio.onplay = () => setIsSpeaking(true);
+    audio.onended = () => setIsSpeaking(false);
+    audio.onerror = () => setIsSpeaking(false);
+    audio.play().catch(() => setIsSpeaking(false));
+  };
+
+  const stopSpeaking = () => {
+    audioElRef.current?.pause();
+    setIsSpeaking(false);
+  };
+
+  /** Speaks already-generated text via real BHASHINI TTS (used for quick-prompt chips,
+   * whose reply came from the text endpoint rather than the voice round-trip). */
+  const speakViaBhashini = async (text) => {
+    try {
+      const { audio_base64 } = await speakText({ text, language: lang });
+      playAudio(audio_base64);
+    } catch {
+      // Voice playback is a nice-to-have on top of the text reply — a TTS failure
+      // shouldn't block the conversation, so it's silently skipped.
+    }
   };
 
   const sendQuery = async (text, { speakReply = true } = {}) => {
@@ -96,11 +122,11 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
       const res = await askAgent({ text, language: lang, ...context });
       const replyText = res.answer || res.response || "KisanSetu recommendation generated.";
       setMessages((prev) => [...prev, { sender: "agent", text: replyText }]);
-      if (speakReply) speak(replyText);
+      if (speakReply) speakViaBhashini(replyText);
     } catch (err) {
       const fallback = err.response?.data?.detail || t("common.backendError");
       setMessages((prev) => [...prev, { sender: "agent", text: fallback }]);
-      if (speakReply) speak(fallback);
+      if (speakReply) speakViaBhashini(fallback);
     } finally {
       setLoading(false);
     }
@@ -113,46 +139,56 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
     sendQuery(text, { speakReply: false });
   };
 
-  const handleMicPress = () => {
-    if (!voiceInputSupported) return;
-    if (isListening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-
-    window.speechSynthesis?.cancel();
-    setIsSpeaking(false);
+  const startRecording = async () => {
+    if (!micSupported) return;
+    stopSpeaking();
     setLiveTranscript("");
-
-    const recognition = new SpeechRecognitionAPI();
-    recognition.lang = currentLanguage.speechLang;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
-      }
-      setLiveTranscript(transcript);
-    };
-    recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => {
-      setIsListening(false);
-      setLiveTranscript((finalText) => {
-        if (finalText.trim()) sendQuery(finalText, { speakReply: true });
-        return "";
-      });
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        setIsRecording(false);
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
+        await sendVoiceQuery(blob);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      setMessages((prev) => [...prev, { sender: "agent", text: "Microphone access was denied. Allow microphone permission to use voice mode." }]);
+    }
   };
 
-  const stopSpeaking = () => {
-    window.speechSynthesis?.cancel();
-    setIsSpeaking(false);
+  const sendVoiceQuery = async (blob) => {
+    setLoading(true);
+    setLiveTranscript(t("assistant.thinking"));
+    try {
+      const audio_base64 = await blobToWavBase64(blob);
+      const res = await askAgentVoice({ audio_base64, language: lang, ...context });
+      setLiveTranscript("");
+      if (res.transcript) setMessages((prev) => [...prev, { sender: "user", text: res.transcript }]);
+      setMessages((prev) => [...prev, { sender: "agent", text: res.answer_text }]);
+      playAudio(res.answer_audio_base64);
+    } catch (err) {
+      setLiveTranscript("");
+      const fallback = err.response?.data?.detail || t("common.backendError");
+      setMessages((prev) => [...prev, { sender: "agent", text: fallback }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMicPress = () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    startRecording();
   };
 
   return (
@@ -225,9 +261,15 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
                 </div>
               )}
 
+              {!micSupported && (
+                <div className="bg-amber-50 border border-amber-300 text-amber-900 p-2.5 rounded-xl text-xs font-semibold">
+                  Microphone recording isn't supported in this browser — use the Text tab instead.
+                </div>
+              )}
+
               {liveTranscript && (
                 <div className="bg-amber-50 border border-amber-300 text-amber-900 p-2.5 rounded-xl text-xs font-semibold">
-                  🎙️ {t("assistant.transcript")}: "{liveTranscript}"
+                  🎙️ {liveTranscript}
                 </div>
               )}
             </div>
@@ -236,16 +278,17 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
             <div className="flex flex-col items-center justify-center my-4 space-y-2">
               <button
                 onClick={handleMicPress}
-                className={`relative w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-2xl transition transform hover:scale-105 cursor-pointer ${
-                  isListening
+                disabled={!micSupported || loading}
+                className={`relative w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-2xl transition transform hover:scale-105 cursor-pointer disabled:opacity-50 ${
+                  isRecording
                     ? "bg-rose-500 text-white animate-pulse ring-8 ring-rose-200"
                     : "bg-emerald-600 text-white hover:bg-emerald-500 ring-8 ring-emerald-100"
                 }`}
               >
-                {isListening ? "🛑" : "🎙️"}
+                {isRecording ? "🛑" : "🎙️"}
               </button>
               <div className="text-xs font-black text-gray-700">
-                {isListening ? t("assistant.listening") : loading ? t("assistant.thinking") : t("assistant.tapToSpeak")}
+                {isRecording ? t("assistant.listening") : loading ? t("assistant.thinking") : t("assistant.tapToSpeak")}
               </div>
             </div>
 

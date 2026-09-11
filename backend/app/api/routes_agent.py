@@ -1,6 +1,8 @@
 """
 KisanSetu Assistant API Routes — BHASHINI + LangGraph Agent.
 """
+import base64
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -19,7 +21,15 @@ class TextQueryRequest(BaseModel):
 
 
 class VoiceQueryRequest(BaseModel):
-    audio_base64: str
+    audio_base64: str  # WAV, 16kHz mono PCM
+    language: str = "hi"
+    crop_name: str = "wheat"
+    quantity_kg: float = 500.0
+    district: str = "Central"
+
+
+class SpeakRequest(BaseModel):
+    text: str
     language: str = "hi"
 
 
@@ -30,7 +40,7 @@ async def agent_text_query(payload: TextQueryRequest):
     if payload.language != "en":
         query_en = await translate_text(payload.text, payload.language, "en")
 
-    agent_result = run_agent_query(
+    agent_result = await run_agent_query(
         query_en, crop_name=payload.crop_name, quantity_kg=payload.quantity_kg, district=payload.district
     )
 
@@ -53,17 +63,32 @@ async def agent_text_query(payload: TextQueryRequest):
 async def agent_voice_query(payload: VoiceQueryRequest):
     """Full voice pipeline: audio -> BHASHINI STT -> Translate -> Agent -> Translate -> BHASHINI TTS."""
     transcript_local = await speech_to_text(payload.audio_base64, payload.language)
-    query_en = await translate_text(transcript_local, payload.language, "en")
+    query_en = transcript_local
+    if payload.language != "en":
+        query_en = await translate_text(transcript_local, payload.language, "en")
 
-    agent_result = run_agent_query(query_en)
+    agent_result = await run_agent_query(
+        query_en, crop_name=payload.crop_name, quantity_kg=payload.quantity_kg, district=payload.district
+    )
     answer_en = agent_result.get("response", "")
 
-    answer_local = await translate_text(answer_en, "en", payload.language)
+    answer_local = answer_en
+    if payload.language != "en":
+        answer_local = await translate_text(answer_en, "en", payload.language)
     audio_bytes = await text_to_speech(answer_local, payload.language)
 
     return {
         "transcript": transcript_local,
         "answer_text": answer_local,
-        "answer_audio_base64": audio_bytes.hex(),
+        "answer_audio_base64": base64.b64encode(audio_bytes).decode("ascii"),
         "language": payload.language,
+        "engine": agent_result.get("engine", "KisanSetu Engine"),
     }
+
+
+@router.post("/speak")
+async def agent_speak(payload: SpeakRequest):
+    """Standalone BHASHINI TTS — used to read an already-generated text reply aloud
+    (e.g. a quick-prompt-chip answer that came back from the text endpoint)."""
+    audio_bytes = await text_to_speech(payload.text, payload.language)
+    return {"audio_base64": base64.b64encode(audio_bytes).decode("ascii")}

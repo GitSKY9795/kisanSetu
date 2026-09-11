@@ -94,6 +94,8 @@ export const evaluateStorage = (payload) =>
 
 // --- Agentic Assistant ---
 export const askAgent = (payload) => apiClient.post("/agent/query", payload).then((r) => r.data);
+export const askAgentVoice = (payload) => apiClient.post("/agent/voice-query", payload).then((r) => r.data);
+export const speakText = (payload) => apiClient.post("/agent/speak", payload).then((r) => r.data);
 
 // --- Transactions & 4-Stage Escrow ---
 export const listTransactions = () => apiClient.get("/transactions").then((r) => r.data);

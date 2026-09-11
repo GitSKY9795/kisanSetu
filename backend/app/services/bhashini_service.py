@@ -13,6 +13,7 @@ reason (the mapping doesn't change between requests).
 from __future__ import annotations
 
 import base64
+import struct
 
 import httpx
 
@@ -22,6 +23,18 @@ AUTH_URL = "https://meity-auth.ulcacontrib.org/ulca/apis/v0/model/getModelsPipel
 DEFAULT_PIPELINE_ID = "64392f96daac500b55c543cd"  # public combined ASR+NMT+TTS pipeline
 
 _pipeline_cache: dict[tuple, dict] = {}
+
+
+def _wav_sample_rate(audio_base64: str, default: int = 16000) -> int:
+    """Reads the real sample rate out of a base64 WAV's header. Declaring the wrong
+    rate to BHASHINI's ASR (e.g. always claiming 16000 regardless of the actual audio)
+    makes it try to interpret the samples at the wrong speed, which can come back
+    badly wrong or take far longer than a matching declaration would."""
+    try:
+        header = base64.b64decode(audio_base64[:64])  # sample rate lives at byte 24-27
+        return struct.unpack("<I", header[24:28])[0]
+    except Exception:
+        return default
 
 
 def _configured() -> bool:
@@ -73,7 +86,7 @@ async def speech_to_text(audio_base64: str, source_language: str) -> str:
                         "language": {"sourceLanguage": source_language},
                         "serviceId": pipeline["service_id"],
                         "audioFormat": "wav",
-                        "samplingRate": 16000,
+                        "samplingRate": _wav_sample_rate(audio_base64),
                     },
                 }
             ],
