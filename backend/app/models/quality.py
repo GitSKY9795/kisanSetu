@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class QualityReport(Base):
@@ -26,4 +27,4 @@ class QualityReport(Base):
     defect_percentage: Mapped[float] = mapped_column(Float, default=0.0)
     confidence: Mapped[float] = mapped_column(Float, default=0.90)
     summary: Mapped[str] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

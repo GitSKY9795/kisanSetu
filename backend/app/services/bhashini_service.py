@@ -13,6 +13,7 @@ reason (the mapping doesn't change between requests).
 from __future__ import annotations
 
 import base64
+import re
 import struct
 
 import httpx
@@ -74,7 +75,7 @@ async def _get_pipeline(task_type: str, config: dict) -> dict | None:
 async def speech_to_text(audio_base64: str, source_language: str) -> str:
     """ASR: base64-encoded audio -> transcribed text in `source_language`."""
     if not _configured():
-        return "मेरी गेहूं की फसल तैयार है, कब बेचना चाहिए?"
+        raise RuntimeError("BHASHINI credentials are not configured")
 
     try:
         pipeline = await _get_pipeline("asr", {"language": {"sourceLanguage": source_language}})
@@ -101,8 +102,61 @@ async def speech_to_text(audio_base64: str, source_language: str) -> str:
             resp.raise_for_status()
             data = resp.json()
             return data["pipelineResponse"][0]["output"][0]["source"]
-    except Exception:
-        return "मेरी गेहूं की फसल तैयार है, कब बेचना चाहिए?"
+    except Exception as exc:
+        raise RuntimeError("BHASHINI speech recognition failed") from exc
+
+
+# Acronyms real AGMARKNET mandi names commonly carry (e.g. "Ahmedgarh APMC"), which
+# have no real translation — confirmed live: the NMT model falls back to spelling
+# "APMC" out letter-by-letter in Devanagari ("ए. पी. एम. सी."), which a TTS voice
+# then reads as disconnected single letters instead of a word. Expanded before
+# translation so the translator (and the voice reading the result) never sees them.
+_ACRONYM_EXPANSIONS = {
+    "AGMARKNET": "government",
+    "e-NWR pledge loan": "loan against stored produce",
+    "e-NWR": "electronic warehouse receipt",
+    "pledge loans": "loans against stored produce",
+    "pledge loan": "loan against stored produce",
+    "APMC": "Market",
+    "FPO": "Farmer Producer Organisation",
+    "WDRA": "Warehousing Development Authority",
+}
+
+
+def _expand_acronyms(text: str) -> str:
+    for acronym, expansion in _ACRONYM_EXPANSIONS.items():
+        text = re.sub(rf"\b{acronym}\b", expansion, text)
+    return text
+
+
+# Numbers, money and dates. Confirmed live: in a multi-sentence answer the NMT model moves and
+# rewrites figures ("3,850 rupees per quintal, 38.50 per kg" came back as "1 rupee per quintal,
+# 2 per kg"), so every figure is swapped for a placeholder number before translating and put back after.
+_FIGURE_RE = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}|₹\s?\d[\d,]*(?:\.\d+)?|\d[\d,]*(?:\.\d+)?\s?%|\d[\d,]*(?:\.\d+)?")
+_SENTENCE_RE = re.compile(r"(?<=[.!?।])\s+|\n+")
+_NATIVE_DIGITS = {chr(base + i): str(i) for base in (0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6, 0x0C66, 0x0CE6, 0x0D66) for i in range(10)}
+
+
+def _protect_figures(sentence: str) -> tuple[str, dict[str, str]]:
+    figures: dict[str, str] = {}
+
+    def swap(match: re.Match) -> str:
+        token = str(90001 + len(figures))
+        figures[token] = match.group(0)
+        return token
+
+    return _FIGURE_RE.sub(swap, sentence), figures
+
+
+def _restore_figures(translated: str, figures: dict[str, str]) -> str | None:
+    """Puts the original figures back; None if the translator lost one (caller keeps English)."""
+    out = "".join(_NATIVE_DIGITS.get(c, c) for c in translated)
+    out = re.sub(r"(?<!\d)9\s*,\s*(0\d{3})(?!\d)", r"9\1", out)  # Indian grouping: "9,0001"
+    for token, original in figures.items():
+        if token not in out:
+            return None
+        out = out.replace(token, original)
+    return out
 
 
 async def translate_text(text: str, source_language: str, target_language: str = "en") -> str:
@@ -112,30 +166,56 @@ async def translate_text(text: str, source_language: str, target_language: str =
     if not _configured():
         return text
 
+    if source_language == "en":
+        text = _expand_acronyms(text)
+
+    # Translate sentence by sentence (one request) — long inputs drift — with figures protected.
+    sentences = [s for s in _SENTENCE_RE.split(text.strip()) if s.strip()] or [text]
+    protected = [_protect_figures(s) for s in sentences]
+
     try:
         lang_config = {"sourceLanguage": source_language, "targetLanguage": target_language}
         pipeline = await _get_pipeline("translation", {"language": lang_config})
         payload = {
             "pipelineTasks": [{"taskType": "translation", "config": {"language": lang_config, "serviceId": pipeline["service_id"]}}],
-            "inputData": {"input": [{"source": text}]},
+            "inputData": {"input": [{"source": p} for p, _ in protected]},
         }
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             resp = await client.post(
                 pipeline["callback_url"],
                 headers={pipeline["auth_header"]: pipeline["auth_value"], "Content-Type": "application/json"},
                 json=payload,
             )
             resp.raise_for_status()
-            data = resp.json()
-            return data["pipelineResponse"][0]["output"][0]["target"]
+            outputs = resp.json()["pipelineResponse"][0]["output"]
+        pieces = []
+        for (original, (_, figures)), item in zip(zip(sentences, protected), outputs):
+            restored = _restore_figures(item["target"], figures)
+            # If a figure went missing, showing that sentence untranslated beats showing a wrong number.
+            pieces.append(restored if restored is not None else original)
+        return " ".join(pieces)
     except Exception:
         return text
+
+
+def _sanitize_for_speech(text: str) -> str:
+    """Strips symbols the TTS voice reads badly or skips outright, without touching
+    the text shown on screen (callers keep the original for display and pass this
+    cleaned copy only to synthesis). Confirmed live: "₹" survives translation
+    untouched and sits in the middle of an otherwise-Hindi sentence, and a literal
+    bullet character ("•", used to list reasons) has no natural spoken form either."""
+    return (
+        text.replace("₹", "Rs. ")
+        .replace("•", "")
+        .replace("  ", " ")
+        .strip()
+    )
 
 
 async def text_to_speech(text: str, target_language: str) -> bytes:
     """TTS: text in `target_language` -> raw audio bytes (WAV)."""
     if not _configured():
-        return b"mock_audio_bytes"
+        raise RuntimeError("BHASHINI credentials are not configured")
 
     try:
         pipeline = await _get_pipeline("tts", {"language": {"sourceLanguage": target_language}})
@@ -150,7 +230,7 @@ async def text_to_speech(text: str, target_language: str) -> bytes:
                     },
                 }
             ],
-            "inputData": {"input": [{"source": text}]},
+            "inputData": {"input": [{"source": _sanitize_for_speech(text)}]},
         }
         async with httpx.AsyncClient(timeout=25) as client:
             resp = await client.post(
@@ -162,5 +242,5 @@ async def text_to_speech(text: str, target_language: str) -> bytes:
             data = resp.json()
             audio_b64 = data["pipelineResponse"][0]["audio"][0]["audioContent"]
             return base64.b64decode(audio_b64)
-    except Exception:
-        return b"mock_audio_bytes"
+    except Exception as exc:
+        raise RuntimeError("BHASHINI speech synthesis failed") from exc

@@ -24,7 +24,12 @@ try:
         ENV: str = "development"
         DEBUG: bool = True
         DATABASE_URL: str = "sqlite:///./kisansetu.db"
-        REDIS_URL: str = "redis://localhost:6379/0"
+        # Firebase SQL Connect (Data Connect) Cloud SQL instance, "project:region:instance".
+        # When set, the backend connects to it through the Cloud SQL connector instead of DATABASE_URL.
+        CLOUD_SQL_INSTANCE: str = ""
+        DB_NAME: str = "kisansetu"
+        DB_USER: str = ""
+        DB_PASSWORD: str = ""
         FIREBASE_PROJECT_ID: str = ""
         GOOGLE_APPLICATION_CREDENTIALS: str = ""
         GEMINI_API_KEY: str = ""
@@ -45,7 +50,10 @@ except Exception:
         ENV = os.getenv("ENV", "development")
         DEBUG = os.getenv("DEBUG", "true").lower() == "true"
         DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./kisansetu.db")
-        REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        CLOUD_SQL_INSTANCE = os.getenv("CLOUD_SQL_INSTANCE", "")
+        DB_NAME = os.getenv("DB_NAME", "kisansetu")
+        DB_USER = os.getenv("DB_USER", "")
+        DB_PASSWORD = os.getenv("DB_PASSWORD", "")
         FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "")
         GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "")
         GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -60,3 +68,9 @@ except Exception:
         CORS_ORIGINS = ["*"]
 
     settings = FallbackSettings()
+
+# Google client libraries prefer GOOGLE_API_KEY when both names exist. Keep it
+# aligned with the explicitly configured Gemini key so an inherited stale key
+# cannot silently power the assistant.
+if settings.GEMINI_API_KEY:
+    os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY

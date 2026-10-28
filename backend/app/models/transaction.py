@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Float, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 ESCROW_STAGES = {
     1: ("FUNDS_ESCROWED", "FUNDS_LOCKED_IN_ESCROW", "READY_FOR_PICKUP"),
@@ -59,15 +60,13 @@ class Transaction(Base):
 
     status: Mapped[str] = mapped_column(String, default="ESCROWED")  # ESCROWED/COMPLETED/DISPUTED
 
-    stage_1_at: Mapped[datetime | None] = mapped_column(DateTime, default=datetime.utcnow)
-    stage_2_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    stage_3_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    stage_4_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    stage_1_at: Mapped[datetime | None] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    stage_2_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    stage_3_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    stage_4_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     farmer: Mapped["Farmer"] = relationship("Farmer")  # noqa: F821
     buyer: Mapped["Buyer"] = relationship("Buyer")  # noqa: F821

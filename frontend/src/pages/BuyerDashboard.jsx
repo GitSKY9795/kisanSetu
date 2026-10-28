@@ -9,21 +9,23 @@ import {
 } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { T } from "../i18n/mark.js";
+import { tServer, tStatus } from "../i18n/serverText.js";
 
 const CROPS_OPTIONS = [
-  { value: "Wheat", label: "Wheat (गेहूँ)" },
-  { value: "Onion", label: "Onion (प्याज)" },
-  { value: "Potato", label: "Potato (आलू)" },
-  { value: "Tomato", label: "Tomato (टमाटर)" },
-  { value: "Cotton", label: "Cotton (कपास)" },
-  { value: "Soybean", label: "Soybean (सोयाबीन)" },
-  { value: "Maize", label: "Maize (मक्का)" },
-  { value: "Paddy", label: "Paddy / Rice (धान / चावल)" },
-  { value: "Mustard", label: "Mustard (सरसों)" },
+  { value: "Wheat" },
+  { value: "Onion" },
+  { value: "Potato" },
+  { value: "Tomato" },
+  { value: "Cotton" },
+  { value: "Soybean" },
+  { value: "Maize" },
+  { value: "Paddy", label: T("Paddy / Rice") },
+  { value: "Mustard" },
 ];
 
 export default function BuyerDashboard() {
-  const { t } = useLanguage();
+  const { t, tn } = useLanguage();
   const { profile } = useAuth();
   const [requirements, setRequirements] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -49,7 +51,7 @@ export default function BuyerDashboard() {
         setTransactions(txns || []);
         setTrustProfile(trust);
       })
-      .catch(() => setError(t("common.backendError")))
+      .catch(() => setError(t("Could not reach the KisanSetu backend. Ensure FastAPI is running on http://localhost:8000.")))
       .finally(() => setLoading(false));
   };
 
@@ -70,7 +72,7 @@ export default function BuyerDashboard() {
       });
       loadAll();
     } catch (err) {
-      setError(err.response?.data?.detail || t("common.backendError"));
+      setError(err.response?.data?.detail || t("Could not reach the KisanSetu backend. Ensure FastAPI is running on http://localhost:8000."));
     } finally {
       setSubmitting(false);
     }
@@ -81,7 +83,7 @@ export default function BuyerDashboard() {
       await advanceEscrowStage(txnId);
       loadAll();
     } catch (err) {
-      alert("Could not advance milestone");
+      alert(t("Could not advance milestone"));
     }
   };
 
@@ -90,7 +92,7 @@ export default function BuyerDashboard() {
       const inv = await getDigitalInvoice(txnId);
       setSelectedInvoice(inv);
     } catch (err) {
-      alert("Could not load invoice");
+      alert(t("Could not load invoice"));
     }
   };
 
@@ -100,20 +102,20 @@ export default function BuyerDashboard() {
       <div className="bg-slate-900 text-white p-6 rounded-3xl shadow-xl flex justify-between items-center flex-wrap gap-4 border border-slate-800">
         <div>
           <span className="bg-amber-400 text-slate-950 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-            {t("buyer.title")}
+            {t("Buyer Procurement Portal")}
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">{profile?.organization || profile?.name || "Your Buyer Account"}</h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1 font-medium">{t("buyer.subtitle")} • {profile?.buyer_category}</p>
+          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">{profile?.organization || profile?.name || t("Your Buyer Account")}</h1>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1 font-medium">{t("Source verified produce lots directly from farmers & FPOs with quality certifications and escrow protection.")}{profile?.buyer_category ? ` • ${t(profile.buyer_category)}` : ""}</p>
         </div>
 
         {trustProfile && (
           <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 text-right space-y-1">
-            <div className="text-xs text-slate-400 uppercase font-bold">Buyer Trust Score</div>
+            <div className="text-xs text-slate-400 uppercase font-bold">{t("Buyer Trust Score")}</div>
             <div className="text-3xl font-black text-emerald-400 flex items-center justify-end gap-1">
               <span>★</span> {trustProfile.trust_score} <span className="text-sm text-slate-400">/ 100</span>
             </div>
             <div className="text-[11px] text-emerald-300 font-semibold">
-              {trustProfile.fulfillment_rate_pct}% Fulfillment • {trustProfile.avg_settlement_hours}h Avg Settlement
+              {t("{pct}% Fulfillment • {hours}h Avg Settlement", { pct: trustProfile.fulfillment_rate_pct, hours: trustProfile.avg_settlement_hours })}
             </div>
           </div>
         )}
@@ -123,14 +125,14 @@ export default function BuyerDashboard() {
         {/* Create Purchase Requirement Form */}
         <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
           <h3 className="text-lg font-black text-gray-900 border-b pb-2.5 flex items-center gap-2">
-            <span>📋</span> {t("buyer.postRequirement")}
+            <span>📋</span> {t("Post Bulk Procurement Requirement")}
           </h3>
           <form onSubmit={handleCreate} className="space-y-3.5 text-xs font-semibold">
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-gray-600">
-              Posting as <span className="font-black text-gray-900">{profile?.organization || profile?.name}</span> ({profile?.buyer_category})
+              {tn("Posting as {name} ({category})", { name: <span className="font-black text-gray-900">{profile?.organization || profile?.name}</span>, category: t(profile?.buyer_category || "Buyer") })}
             </div>
             <div>
-              <label className="block text-gray-700 font-bold mb-1">{t("buyer.requiredCrop")}</label>
+              <label className="block text-gray-700 font-bold mb-1">{t("Target Crop")}</label>
               {/* Dropdown for crop selection */}
               <select
                 value={form.crop_name}
@@ -139,13 +141,13 @@ export default function BuyerDashboard() {
               >
                 {CROPS_OPTIONS.map((c) => (
                   <option key={c.value} value={c.value}>
-                    {c.label}
+                    {t(c.label || c.value)}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-gray-700 font-bold mb-1">{t("buyer.requiredQuantity")}</label>
+              <label className="block text-gray-700 font-bold mb-1">{t("Procurement Volume (kg)")}</label>
               <input
                 type="number"
                 value={form.quantity_kg}
@@ -155,7 +157,7 @@ export default function BuyerDashboard() {
               />
             </div>
             <div>
-              <label className="block text-gray-700 font-bold mb-1">{t("buyer.maxPrice")}</label>
+              <label className="block text-gray-700 font-bold mb-1">{t("Target Price (₹/kg)")}</label>
               <input
                 type="number"
                 step="0.5"
@@ -166,7 +168,7 @@ export default function BuyerDashboard() {
               />
             </div>
             <div>
-              <label className="block text-gray-700 font-bold mb-1">{t("buyer.targetDistrict")}</label>
+              <label className="block text-gray-700 font-bold mb-1">{t("Target Sourcing District")}</label>
               <input
                 type="text"
                 value={form.district}
@@ -180,7 +182,7 @@ export default function BuyerDashboard() {
               disabled={submitting}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-3 rounded-xl transition disabled:opacity-60 shadow-md text-xs cursor-pointer"
             >
-              {submitting ? t("buyer.posting") : t("buyer.postButton")}
+              {submitting ? t("Broadcasting Requirement…") : t("+ Broadcast Requirement")}
             </button>
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3 rounded-xl">
@@ -195,9 +197,9 @@ export default function BuyerDashboard() {
           {/* Active Requirements */}
           <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
             <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-              <span>📢</span> {t("buyer.activeRequirements")}
+              <span>📢</span> {t("Active Procurement Requirements")}
             </h3>
-            {loading && <p className="text-sm text-gray-500">{t("common.loading")}</p>}
+            {loading && <p className="text-sm text-gray-500">{t("Loading…")}</p>}
             <div className="space-y-3">
               {requirements.map((req) => (
                 <div
@@ -207,18 +209,18 @@ export default function BuyerDashboard() {
                   <div>
                     <div className="flex gap-2 items-center">
                       <span className="bg-slate-800 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                        {req.buyer_category}
+                        {t(req.buyer_category)}
                       </span>
                       <span className="text-xs text-gray-500 font-bold">📍 {req.district}</span>
                     </div>
                     <h4 className="text-base font-black text-gray-900 mt-1">
-                      {req.crop_name} ({req.quantity_kg?.toLocaleString()} kg)
+                      {t("{crop} ({qty} kg)", { crop: t(req.crop_name), qty: req.quantity_kg?.toLocaleString() })}
                     </h4>
-                    <p className="text-xs text-gray-500">Quality Spec: {req.quality_grade || "Grade A"}</p>
+                    <p className="text-xs text-gray-500">{t("Quality Spec: {grade}", { grade: t(req.quality_grade || "Grade A") })}</p>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-black text-emerald-700">Max ₹{req.target_price_per_kg}/kg</div>
-                    <span className="text-[10px] text-gray-500">Est: ₹{(req.target_price_per_kg * req.quantity_kg).toLocaleString()}</span>
+                    <div className="text-lg font-black text-emerald-700">{t("Max ₹{price}/kg", { price: req.target_price_per_kg })}</div>
+                    <span className="text-[10px] text-gray-500">{t("Est: ₹{amount}", { amount: (req.target_price_per_kg * req.quantity_kg).toLocaleString() })}</span>
                   </div>
                 </div>
               ))}
@@ -230,14 +232,14 @@ export default function BuyerDashboard() {
             <div className="flex justify-between items-center border-b pb-3">
               <div>
                 <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
-                  <span>🔒</span> 4-Stage Milestone Escrow Settlement Tracker
+                  <span>🔒</span> {t("4-Stage Milestone Escrow Settlement Tracker")}
                 </h3>
                 <p className="text-xs text-gray-500">
-                  Secured agricultural trade contracts with milestone fund protection.
+                  {t("Secured agricultural trade contracts with milestone fund protection.")}
                 </p>
               </div>
               <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-3 py-1 rounded-full">
-                {transactions.length} Active Escrow Orders
+                {t("{count} Active Escrow Orders", { count: transactions.length })}
               </span>
             </div>
 
@@ -251,23 +253,23 @@ export default function BuyerDashboard() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="bg-emerald-800 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                          Stage {txn.escrow_stage} of 4
+                          {t("Stage {n} of 4", { n: txn.escrow_stage })}
                         </span>
                         <span className="text-xs font-bold text-gray-600 font-mono">{txn.invoice_no || txn.id}</span>
                       </div>
                       <h4 className="text-lg font-black text-gray-900 mt-1">
-                        {txn.crop_name} • {txn.quantity_kg?.toLocaleString()} kg
+                        {t("{crop} • {qty} kg", { crop: t(txn.crop_name), qty: txn.quantity_kg?.toLocaleString() })}
                       </h4>
                       <p className="text-xs text-gray-600">
-                        Farmer: <span className="font-bold text-gray-900">{txn.farmer_name}</span> • Rate: ₹{txn.agreed_price_per_kg}/kg
+                        {tn("Farmer: {name} • Rate: ₹{rate}/kg", { name: <span className="font-bold text-gray-900">{txn.farmer_name}</span>, rate: txn.agreed_price_per_kg })}
                       </p>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-bold text-gray-500 uppercase">Escrow Value</div>
+                      <div className="text-xs font-bold text-gray-500 uppercase">{t("Escrow Value")}</div>
                       <div className="text-2xl font-black text-emerald-800">
                         ₹{txn.total_amount_inr?.toLocaleString()}
                       </div>
-                      <div className="text-xs text-emerald-700 font-bold">{txn.payment_status}</div>
+                      <div className="text-xs text-emerald-700 font-bold">{tStatus(t, txn.payment_status)}</div>
                     </div>
                   </div>
 
@@ -282,8 +284,8 @@ export default function BuyerDashboard() {
                             : "bg-white text-gray-400 border-gray-200"
                         }`}
                       >
-                        <div className="font-black text-xs">{st.stage}. {st.name}</div>
-                        <div className="text-[9px] mt-0.5">{st.status}</div>
+                        <div className="font-black text-xs">{st.stage}. {t(st.name)}</div>
+                        <div className="text-[9px] mt-0.5">{tStatus(t, st.status)}</div>
                       </div>
                     ))}
                   </div>
@@ -294,7 +296,7 @@ export default function BuyerDashboard() {
                       onClick={() => handleViewInvoice(txn.id)}
                       className="text-xs font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 cursor-pointer"
                     >
-                      <span>📜</span> View Digital Invoice
+                      <span>📜</span> {t("View Digital Invoice")}
                     </button>
 
                     {txn.escrow_stage < 4 && (
@@ -302,12 +304,12 @@ export default function BuyerDashboard() {
                         onClick={() => handleAdvanceEscrow(txn.id)}
                         className="bg-emerald-700 hover:bg-emerald-600 text-white font-black px-4 py-1.5 rounded-xl text-xs shadow transition cursor-pointer"
                       >
-                        Advance to Stage {txn.escrow_stage + 1} (Verify Milestone) →
+                        {t("Advance to Stage {n} (Verify Milestone) →", { n: txn.escrow_stage + 1 })}
                       </button>
                     )}
                     {txn.escrow_stage === 4 && (
                       <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-3 py-1 rounded-lg">
-                        ✓ Funds Disbursed to Farmer UPI
+                        {t("✓ Funds Disbursed to Farmer UPI")}
                       </span>
                     )}
                   </div>
@@ -324,9 +326,9 @@ export default function BuyerDashboard() {
           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl p-6 space-y-4">
             <div className="flex justify-between items-start border-b pb-3">
               <div>
-                <h3 className="text-lg font-black text-gray-900">{selectedInvoice.invoice_header.title}</h3>
+                <h3 className="text-lg font-black text-gray-900">{t(selectedInvoice.invoice_header.title)}</h3>
                 <p className="text-xs text-gray-500">
-                  Invoice No: {selectedInvoice.invoice_header.invoice_no} • Date: {selectedInvoice.invoice_header.date}
+                  {t("Invoice No: {no} • Date: {date}", { no: selectedInvoice.invoice_header.invoice_no, date: selectedInvoice.invoice_header.date })}
                 </p>
               </div>
               <button
@@ -340,36 +342,36 @@ export default function BuyerDashboard() {
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-2xl">
                 <div>
-                  <div className="font-bold text-gray-500">Seller / Farmer</div>
+                  <div className="font-bold text-gray-500">{t("Seller / Farmer")}</div>
                   <div className="font-black text-gray-900">{selectedInvoice.parties.seller_farmer}</div>
                 </div>
                 <div>
-                  <div className="font-bold text-gray-500">Buyer Entity</div>
+                  <div className="font-bold text-gray-500">{t("Buyer Entity")}</div>
                   <div className="font-black text-gray-900">{selectedInvoice.parties.buyer_organization}</div>
                 </div>
               </div>
 
               <div className="border rounded-2xl p-3.5 space-y-1.5">
                 <div className="flex justify-between font-semibold">
-                  <span>Commodity:</span>
-                  <span className="font-bold text-gray-900">{selectedInvoice.item_details.crop} ({selectedInvoice.item_details.quality_grade})</span>
+                  <span>{t("Commodity:")}</span>
+                  <span className="font-bold text-gray-900">{t(selectedInvoice.item_details.crop)} ({tServer(t, selectedInvoice.item_details.quality_grade)})</span>
                 </div>
                 <div className="flex justify-between font-semibold">
-                  <span>Quantity:</span>
-                  <span>{selectedInvoice.item_details.quantity_kg} kg</span>
+                  <span>{t("Quantity:")}</span>
+                  <span>{selectedInvoice.item_details.quantity_kg} {t("kg")}</span>
                 </div>
                 <div className="flex justify-between font-semibold">
-                  <span>Rate:</span>
-                  <span>₹{selectedInvoice.item_details.unit_price_inr} / kg</span>
+                  <span>{t("Rate:")}</span>
+                  <span>₹{selectedInvoice.item_details.unit_price_inr} {t("/ kg")}</span>
                 </div>
                 <div className="flex justify-between font-black text-sm text-emerald-800 pt-1 border-t">
-                  <span>Gross Settlement:</span>
+                  <span>{t("Gross Settlement:")}</span>
                   <span>₹{selectedInvoice.item_details.gross_amount_inr?.toLocaleString()}</span>
                 </div>
               </div>
 
               <div className="bg-emerald-50 p-3 rounded-2xl border border-emerald-200 text-emerald-900 font-semibold text-[11px]">
-                🔒 {selectedInvoice.settlement.guarantee}
+                🔒 {t(selectedInvoice.settlement.guarantee)}
               </div>
             </div>
 
@@ -378,13 +380,13 @@ export default function BuyerDashboard() {
                 onClick={() => window.print()}
                 className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
               >
-                🖨️ Print Slip
+                {t("🖨️ Print Slip")}
               </button>
               <button
                 onClick={() => setSelectedInvoice(null)}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
               >
-                Close
+                {t("Close")}
               </button>
             </div>
           </div>

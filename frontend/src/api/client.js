@@ -22,6 +22,7 @@ apiClient.interceptors.request.use(async (config) => {
 // --- Identity ---
 export const getMe = () => apiClient.get("/auth/me").then((r) => r.data);
 export const setUsername = (username) => apiClient.post("/auth/username", { username }).then((r) => r.data);
+export const updateProfile = (changes) => apiClient.patch("/auth/profile", changes).then((r) => r.data);
 export const registerFarmer = (payload) => apiClient.post("/auth/register/farmer", payload).then((r) => r.data);
 export const registerBuyer = (payload) => apiClient.post("/auth/register/buyer", payload).then((r) => r.data);
 export const registerFpo = (payload) => apiClient.post("/auth/register/fpo", payload).then((r) => r.data);
@@ -56,14 +57,16 @@ export const getBuyerTrust = (buyerId) =>
   apiClient.get(`/marketplace/buyer-trust/${buyerId}`).then((r) => r.data);
 
 // --- Prices & Arbitrage ---
+export const getPriceSummary = (crops, params) =>
+  apiClient.get("/prices/summary", { params: { crops: crops.join(","), ...params } }).then((r) => r.data);
 export const getCurrentPrice = (crop, params) =>
   apiClient.get(`/prices/${crop}`, { params }).then((r) => r.data);
 export const getPriceHistory = (crop, params) =>
   apiClient.get(`/prices/${crop}/history`, { params }).then((r) => r.data);
 export const getNearbyMandis = (crop, params) =>
   apiClient.get(`/prices/${crop}/nearby-mandis`, { params }).then((r) => r.data);
-export const getMultiHorizonForecast = (crop) =>
-  apiClient.get(`/prices/${crop}/forecast-multi-horizon`).then((r) => r.data);
+export const getMultiHorizonForecast = (crop, params) =>
+  apiClient.get(`/prices/${crop}/forecast-multi-horizon`, { params }).then((r) => r.data);
 
 // --- Sell Decision ---
 export const getDecision = (payload) => apiClient.post("/decision/recommend", payload).then((r) => r.data);
@@ -95,6 +98,7 @@ export const evaluateStorage = (payload) =>
 // --- Agentic Assistant ---
 export const askAgent = (payload) => apiClient.post("/agent/query", payload).then((r) => r.data);
 export const askAgentVoice = (payload) => apiClient.post("/agent/voice-query", payload).then((r) => r.data);
+export const transcribeVoice = (payload) => apiClient.post("/agent/transcribe", payload).then((r) => r.data);
 export const speakText = (payload) => apiClient.post("/agent/speak", payload).then((r) => r.data);
 
 // --- Transactions & 4-Stage Escrow ---

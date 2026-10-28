@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import SellDecisionCard from "../components/SellDecisionCard.jsx";
 import NetRealizationCard from "../components/NetRealizationCard.jsx";
 import QualityGradingCard from "../components/QualityGradingCard.jsx";
@@ -7,30 +8,30 @@ import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAssistant } from "../context/AssistantContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useGeolocation } from "../hooks/useGeolocation.js";
+import { T } from "../i18n/mark.js";
+import { tServer, tStatus } from "../i18n/serverText.js";
 
-const CROPS = [
-  { value: "Wheat", label: "Wheat (गेहूँ)" },
-  { value: "Onion", label: "Onion (प्याज)" },
-  { value: "Potato", label: "Potato (आलू)" },
-  { value: "Tomato", label: "Tomato (टमाटर)" },
-  { value: "Cotton", label: "Cotton (कपास)" },
-  { value: "Soybean", label: "Soybean (सोयाबीन)" },
-  { value: "Maize", label: "Maize (मक्का)" },
-];
+const CROPS = ["Wheat", "Onion", "Potato", "Tomato", "Cotton", "Soybean", "Maize"].map((value) => ({ value }));
+const DEFAULT_HARVEST_STATUS = T("Ready for Harvest (3 days)");
 
 export default function FarmerDashboard() {
-  const { t } = useLanguage();
+  const { t, tn } = useLanguage();
   const { openAssistant } = useAssistant();
   const { profile } = useAuth();
   const geo = useGeolocation();
 
-  const [activeTab, setActiveTab] = useState("decision"); // "decision" | "arbitrage" | "quality" | "listings" | "offers"
+  // The home dashboard's feature cards deep-link here with ?tab=<name>.
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState(
+    ["decision", "arbitrage", "quality", "listings", "offers"].includes(requestedTab) ? requestedTab : "decision"
+  ); // "decision" | "arbitrage" | "quality" | "listings" | "offers"
 
   const [form, setForm] = useState({
     crop_name: "Wheat",
     quantity_kg: 500,
     district: "Ujjain",
-    harvest_date: "Ready for Harvest (3 days)",
+    harvest_date: DEFAULT_HARVEST_STATUS,
     storage_capacity_kg: 600,
   });
   const [districtTouched, setDistrictTouched] = useState(false);
@@ -96,7 +97,7 @@ export default function FarmerDashboard() {
       });
       loadListings();
     } catch (err) {
-      setListingError(err.response?.data?.detail || t("common.backendError"));
+      setListingError(err.response?.data?.detail || t("Could not reach the KisanSetu backend. Ensure FastAPI is running on http://localhost:8000."));
     } finally {
       setCreatingListing(false);
     }
@@ -125,7 +126,7 @@ export default function FarmerDashboard() {
       // Also load nearby mandis arbitrage
       loadArbitrage();
     } catch (err) {
-      setError(err.response?.data?.detail || t("common.backendError"));
+      setError(err.response?.data?.detail || t("Could not reach the KisanSetu backend. Ensure FastAPI is running on http://localhost:8000."));
     } finally {
       setLoading(false);
     }
@@ -144,13 +145,19 @@ export default function FarmerDashboard() {
     }
   };
 
+  // Clicking the Arbitrage tab loads its data; landing on it via a deep link must too.
+  useEffect(() => {
+    if (requestedTab === "arbitrage") loadArbitrage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleAcceptOffer = async (offerId) => {
     try {
       await acceptMarketplaceOffer(offerId);
       loadOffers();
       loadListings();
     } catch (err) {
-      alert("Could not accept offer: " + (err.response?.data?.detail || err.message));
+      alert(t("Could not accept offer: {reason}", { reason: err.response?.data?.detail || err.message }));
     }
   };
 
@@ -166,7 +173,7 @@ export default function FarmerDashboard() {
       setCounterPrice("");
       loadOffers();
     } catch (err) {
-      alert("Could not submit counter-offer");
+      alert(t("Could not submit counter-offer"));
     }
   };
 
@@ -183,24 +190,24 @@ export default function FarmerDashboard() {
       <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-900 text-white p-6 rounded-2xl shadow-xl flex justify-between items-center flex-wrap gap-4 border border-emerald-800">
         <div>
           <span className="bg-amber-400 text-emerald-950 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
-            {t("farmer.badge")}
+            {t("AI Market Intelligence")}
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">Welcome, {profile?.name || "Farmer"}</h1>
+          <h1 className="text-2xl sm:text-3xl font-black mt-2 tracking-tight">{t("Welcome, {name}", { name: profile?.name || t("Farmer") })}</h1>
           <p className="text-emerald-200 text-sm mt-1 flex items-center gap-1.5 font-medium">
-            <span>📍</span> {[profile?.village, profile?.district, profile?.state].filter(Boolean).join(", ") || t("farmer.location")}
+            <span>📍</span> {[profile?.village, profile?.district, profile?.state].filter(Boolean).join(", ") || t("Location not set")}
           </p>
         </div>
         {currentPriceInfo && (
           <div className="bg-emerald-900/60 p-4 rounded-2xl border border-emerald-700 text-right backdrop-blur-sm">
             <div className="text-xs text-emerald-300 uppercase font-bold tracking-wider">
-              {t("farmer.marketPrice")} ({form.crop_name})
+              {t("Current Market Price ({crop})", { crop: t(form.crop_name) })}
             </div>
             <div className="text-3xl font-black text-amber-300">
               ₹{currentPriceInfo.current_price_per_quintal?.toLocaleString("en-IN")}{" "}
-              <span className="text-sm font-semibold text-emerald-200">/ qtl</span>
+              <span className="text-sm font-semibold text-emerald-200">{t("/ qtl")}</span>
             </div>
             <div className="text-xs text-emerald-300 mt-0.5">
-              ≈ ₹{(currentPriceInfo.current_price_per_quintal / 100).toFixed(2)} / kg
+              ≈ ₹{(currentPriceInfo.current_price_per_quintal / 100).toFixed(2)} {t("/ kg")}
             </div>
           </div>
         )}
@@ -216,7 +223,7 @@ export default function FarmerDashboard() {
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          {t("farmer.tabDecision")}
+          {t("🎯 AI Sell Recommendation")}
         </button>
         <button
           onClick={() => {
@@ -229,7 +236,7 @@ export default function FarmerDashboard() {
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          {t("farmer.tabArbitrage")}
+          {t("📍 Nearby Mandi Arbitrage")}
         </button>
         <button
           onClick={() => setActiveTab("quality")}
@@ -239,7 +246,7 @@ export default function FarmerDashboard() {
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          {t("farmer.tabQuality")}
+          {t("🔍 Quality & e-Certificate")}
         </button>
         <button
           onClick={() => setActiveTab("listings")}
@@ -249,7 +256,7 @@ export default function FarmerDashboard() {
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          My Listings{" "}
+          {t("My Listings")}{" "}
           {listings.length > 0 && (
             <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full">
               {listings.length}
@@ -264,7 +271,7 @@ export default function FarmerDashboard() {
               : "text-gray-600 hover:bg-gray-100"
           }`}
         >
-          {t("farmer.tabOffers")}{" "}
+          {t("💬 Buyer Offers & Bids")}{" "}
           {offers.length > 0 && (
             <span className="bg-amber-400 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full">
               {offers.length}
@@ -276,23 +283,23 @@ export default function FarmerDashboard() {
       {/* Market Quick Metric Badges */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("farmer.marketPrice")}</div>
+          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("Current Market Price")}</div>
           <div className="text-xl font-black text-emerald-800 mt-1">
-            {decision ? `₹${decision.current_price_per_kg}/kg` : "—"}
+            {decision ? `₹${decision.current_price_per_kg}${t("/kg")}` : "—"}
           </div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("farmer.demandLevel")}</div>
-          <div className="text-xl font-black text-blue-700 mt-1">{decision ? decision.demand_level : "—"}</div>
+          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("Buyer Demand")}</div>
+          <div className="text-xl font-black text-blue-700 mt-1">{decision ? tServer(t, decision.demand_level) : "—"}</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("farmer.weatherRisk")}</div>
-          <div className="text-xl font-black text-teal-700 mt-1">{decision ? decision.weather_condition : "—"}</div>
+          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("Weather Risk")}</div>
+          <div className="text-xl font-black text-teal-700 mt-1">{decision ? tServer(t, decision.weather_condition) : "—"}</div>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("farmer.logisticsFreight")}</div>
+          <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">{t("Avg Freight Cost")}</div>
           <div className="text-xl font-black text-gray-800 mt-1">
-            {decision?.logistics ? `₹${decision.logistics.transport_cost_per_kg}/kg` : "—"}
+            {decision?.logistics ? `₹${decision.logistics.transport_cost_per_kg}${t("/kg")}` : "—"}
           </div>
         </div>
       </div>
@@ -303,11 +310,11 @@ export default function FarmerDashboard() {
           {/* Form Input Column */}
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
             <h3 className="text-lg font-black text-gray-900 border-b pb-2.5 flex items-center gap-2">
-              <span>🌾</span> {t("farmer.formTitle")}
+              <span>🌾</span> {t("Enter Produce Details")}
             </h3>
             <form onSubmit={handleEvaluate} className="space-y-3.5 text-xs font-semibold">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{t("farmer.cropName")}</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Crop Name")}</label>
                 <select
                   name="crop_name"
                   value={form.crop_name}
@@ -316,13 +323,13 @@ export default function FarmerDashboard() {
                 >
                   {CROPS.map((c) => (
                     <option key={c.value} value={c.value}>
-                      {c.label}
+                      {t(c.value)}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{t("farmer.quantityKg")}</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Harvest Quantity (kg)")}</label>
                 <input
                   type="number"
                   name="quantity_kg"
@@ -332,7 +339,7 @@ export default function FarmerDashboard() {
                 />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{t("farmer.district")}</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Farm District")}</label>
                 <input
                   type="text"
                   name="district"
@@ -342,17 +349,17 @@ export default function FarmerDashboard() {
                 />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{t("farmer.harvestReadiness")}</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Harvest Status")}</label>
                 <input
                   type="text"
                   name="harvest_date"
-                  value={form.harvest_date}
+                  value={form.harvest_date === DEFAULT_HARVEST_STATUS ? t(DEFAULT_HARVEST_STATUS) : form.harvest_date}
                   onChange={handleChange}
                   className="w-full border border-gray-300 rounded-xl p-2.5 text-sm font-bold text-gray-800"
                 />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">{t("farmer.storageCapacity")}</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Available On-Farm Storage (kg)")}</label>
                 <input
                   type="number"
                   name="storage_capacity_kg"
@@ -366,14 +373,14 @@ export default function FarmerDashboard() {
                 disabled={loading}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg transition disabled:opacity-60 text-sm"
               >
-                {loading ? t("farmer.calculating") : t("farmer.calculate")}
+                {loading ? t("Running ML Models…") : t("Calculate Optimal Sell Decision")}
               </button>
               <button
                 type="button"
                 onClick={askAboutThisCrop}
                 className="w-full bg-white border-2 border-emerald-600 text-emerald-800 hover:bg-emerald-50 font-black py-2.5 rounded-xl text-xs transition flex items-center justify-center gap-1.5"
               >
-                {t("farmer.askAi")}
+                {t("🎙️ Ask AI Voice Assistant")}
               </button>
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3 rounded-xl">
@@ -388,7 +395,7 @@ export default function FarmerDashboard() {
             {!decision && !loading && (
               <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-10 text-center text-sm text-gray-500 space-y-2">
                 <div className="text-4xl">🌾</div>
-                <div className="font-bold text-gray-700">{t("farmer.emptyState")}</div>
+                <div className="font-bold text-gray-700">{t("Enter your produce details and click Calculate to run the KisanSetu decision engine.")}</div>
               </div>
             )}
             <SellDecisionCard decision={decision} />
@@ -404,16 +411,16 @@ export default function FarmerDashboard() {
             <div className="flex justify-between items-start flex-wrap gap-3">
               <div>
                 <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
-                  <span>📍</span> {t("arbitrage.title")}
+                  <span>📍</span> {t("Nearby Mandi Price Arbitrage (Spatial Price Discovery)")}
                 </h3>
-                <p className="text-xs text-gray-600 mt-1">{t("arbitrage.subtitle")}</p>
+                <p className="text-xs text-gray-600 mt-1">{t("Find where you will pocket the highest in-hand money after deducting road freight and mandi cess.")}</p>
               </div>
               <button
                 onClick={loadArbitrage}
                 disabled={loadingArbitrage}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black px-4 py-2 rounded-xl transition"
               >
-                {loadingArbitrage ? "Updating Prices…" : "🔄 Refresh Nearby APMCs"}
+                {loadingArbitrage ? t("Updating Prices…") : t("🔄 Refresh Nearby APMCs")}
               </button>
             </div>
 
@@ -421,16 +428,16 @@ export default function FarmerDashboard() {
               <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-2xl p-4 flex justify-between items-center flex-wrap gap-3">
                 <div>
                   <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
-                    {t("arbitrage.bestBadge")}
+                    {t("HIGHEST NET PROFIT MANDI")}
                   </span>
                   <div className="text-xl font-black text-emerald-950 mt-1">
-                    {arbitrageData.best_mandi}
+                    {t(arbitrageData.best_mandi)}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs font-bold text-gray-600">{t("arbitrage.gainText")}</div>
+                  <div className="text-xs font-bold text-gray-600">{t("Extra net profit vs lowest mandi")}</div>
                   <div className="text-2xl font-black text-emerald-700">
-                    +₹{arbitrageData.total_arbitrage_gain_inr?.toLocaleString()} In-Hand
+                    {t("+₹{amount} In-Hand", { amount: arbitrageData.total_arbitrage_gain_inr?.toLocaleString() })}
                   </div>
                 </div>
               </div>
@@ -441,13 +448,13 @@ export default function FarmerDashboard() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-gray-100 text-gray-700 font-bold border-b text-[11px]">
                   <tr>
-                    <th className="p-3">{t("arbitrage.mandi")}</th>
-                    <th className="p-3">{t("arbitrage.distance")}</th>
-                    <th className="p-3">{t("arbitrage.grossPrice")}</th>
-                    <th className="p-3">{t("arbitrage.transportDeduction")}</th>
-                    <th className="p-3">{t("arbitrage.mandiCess")}</th>
-                    <th className="p-3">{t("arbitrage.netPayout")}</th>
-                    <th className="p-3 text-right">{t("arbitrage.totalPayout")}</th>
+                    <th className="p-3">{t("APMC Market")}</th>
+                    <th className="p-3">{t("Distance")}</th>
+                    <th className="p-3">{t("Gross Price / qtl")}</th>
+                    <th className="p-3">{t("Freight Cost")}</th>
+                    <th className="p-3">{t("Mandi Cess")}</th>
+                    <th className="p-3">{t("True In-Hand / qtl")}</th>
+                    <th className="p-3 text-right">{t("Total In-Hand Amount")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 font-medium">
@@ -458,16 +465,16 @@ export default function FarmerDashboard() {
                     >
                       <td className="p-3">
                         <div className="font-black flex items-center gap-1.5">
-                          {m.market_name}{" "}
+                          {t(m.market_name)}{" "}
                           {m.is_best_payout && (
                             <span className="bg-emerald-600 text-white text-[9px] px-1.5 py-0.2 rounded font-black">
-                              BEST
+                              {t("BEST")}
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-gray-500 font-normal">{m.district}, {m.state}</div>
+                        <div className="text-[10px] text-gray-500 font-normal">{t(m.district)}, {t(m.state)}</div>
                       </td>
-                      <td className="p-3 font-semibold text-gray-700">{m.distance_km} km</td>
+                      <td className="p-3 font-semibold text-gray-700">{m.distance_km} {t("km")}</td>
                       <td className="p-3 font-bold text-gray-900">₹{m.gross_price_per_quintal}</td>
                       <td className="p-3 text-rose-600 font-semibold">-₹{m.transport_cost_per_quintal}</td>
                       <td className="p-3 text-gray-600">-₹{m.mandi_cess_per_quintal}</td>
@@ -498,58 +505,58 @@ export default function FarmerDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
             <h3 className="text-lg font-black text-gray-900 border-b pb-2.5 flex items-center gap-2">
-              <span>➕</span> Create Produce Listing
+              <span>➕</span> {t("Create Produce Listing")}
             </h3>
             <form onSubmit={handleCreateListing} className="space-y-3.5 text-xs font-semibold">
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Crop</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Crop")}</label>
                 <select
                   value={listingForm.crop_name}
                   onChange={(e) => setListingForm({ ...listingForm, crop_name: e.target.value })}
                   className="w-full border border-gray-300 rounded-xl p-2.5 bg-gray-50 text-sm font-bold text-gray-800"
                 >
-                  {CROPS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  {CROPS.map((c) => <option key={c.value} value={c.value}>{t(c.value)}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Variety</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Variety")}</label>
                 <input value={listingForm.variety} onChange={(e) => setListingForm({ ...listingForm, variety: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5" />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Quantity (kg)</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Quantity (kg)")}</label>
                 <input type="number" value={listingForm.quantity_kg} onChange={(e) => setListingForm({ ...listingForm, quantity_kg: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5" required />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Asking Price (₹/kg)</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Asking Price (₹/kg)")}</label>
                 <input type="number" step="0.5" value={listingForm.price_per_kg} onChange={(e) => setListingForm({ ...listingForm, price_per_kg: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5 font-black text-emerald-800" required />
               </div>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Quality Grade</label>
+                <label className="block font-bold text-gray-700 mb-1">{t("Quality Grade")}</label>
                 <select value={listingForm.quality_grade} onChange={(e) => setListingForm({ ...listingForm, quality_grade: e.target.value })} className="w-full border border-gray-300 rounded-xl p-2.5 bg-gray-50">
-                  <option value="Grade A">Grade A</option>
-                  <option value="Grade B">Grade B</option>
-                  <option value="Grade C">Grade C</option>
+                  <option value="Grade A">{t("Grade A")}</option>
+                  <option value="Grade B">{t("Grade B")}</option>
+                  <option value="Grade C">{t("Grade C")}</option>
                 </select>
               </div>
               <button type="submit" disabled={creatingListing} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-3 rounded-xl shadow-lg transition disabled:opacity-60 text-sm">
-                {creatingListing ? "Publishing…" : "Publish to Marketplace"}
+                {creatingListing ? t("Publishing…") : t("Publish to Marketplace")}
               </button>
               {listingError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs font-bold p-3 rounded-xl">⚠️ {listingError}</div>}
             </form>
           </div>
 
           <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-3">
-            <h3 className="text-lg font-black text-gray-900 border-b pb-2.5">📋 Your Active Listings</h3>
-            {listings.length === 0 && <p className="text-sm text-gray-500">No listings yet — publish one to appear in every buyer's Marketplace feed.</p>}
+            <h3 className="text-lg font-black text-gray-900 border-b pb-2.5">{t("📋 Your Active Listings")}</h3>
+            {listings.length === 0 && <p className="text-sm text-gray-500">{t("No listings yet — publish one to appear in every buyer's Marketplace feed.")}</p>}
             {listings.map((l) => (
               <div key={l.id} className="p-4 rounded-xl border border-gray-200 bg-gray-50/50 flex justify-between items-center flex-wrap gap-2">
                 <div>
-                  <div className="font-black text-gray-900">{l.crop_name} <span className="text-xs font-semibold text-gray-500">({l.variety})</span></div>
-                  <div className="text-xs text-gray-600">{l.quantity_kg} kg • {l.quality_grade} • {l.district}</div>
+                  <div className="font-black text-gray-900">{t(l.crop_name)} <span className="text-xs font-semibold text-gray-500">({l.variety})</span></div>
+                  <div className="text-xs text-gray-600">{l.quantity_kg} {t("kg")} • {t(l.quality_grade)} • {l.district}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-black text-emerald-700">₹{l.price_per_kg}/kg</div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${l.status === "LISTED" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{l.status}</span>
+                  <div className="font-black text-emerald-700">₹{l.price_per_kg}{t("/kg")}</div>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${l.status === "LISTED" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{tStatus(t, l.status)}</span>
                 </div>
               </div>
             ))}
@@ -562,13 +569,13 @@ export default function FarmerDashboard() {
         <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4">
           <div className="flex justify-between items-center border-b pb-3">
             <div>
-              <h3 className="text-xl font-black text-gray-900">💬 Active Buyer Offers & Escrow Contracts</h3>
+              <h3 className="text-xl font-black text-gray-900">{t("💬 Active Buyer Offers & Escrow Contracts")}</h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Review digital bids received from verified food processors and wholesalers for your lots.
+                {t("Review digital bids received from verified food processors and wholesalers for your lots.")}
               </p>
             </div>
             <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-3 py-1 rounded-full">
-              {offers.length} Offers
+              {t("{count} offers", { count: offers.length })}
             </span>
           </div>
 
@@ -582,34 +589,34 @@ export default function FarmerDashboard() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="bg-slate-900 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full">
-                        {offer.buyer_category}
+                        {t(offer.buyer_category)}
                       </span>
-                      <span className="text-xs font-bold text-gray-500 font-mono">Offer ID: {offer.id}</span>
+                      <span className="text-xs font-bold text-gray-500 font-mono">{t("Offer ID:")} {offer.id}</span>
                       <span className="bg-amber-100 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">
-                        {offer.status}
+                        {tStatus(t, offer.status)}
                       </span>
                     </div>
                     <h4 className="text-lg font-black text-gray-900 mt-1">{offer.buyer_name}</h4>
                     <p className="text-xs text-gray-600 font-medium">
-                      Crop: <span className="font-bold text-gray-900">{offer.crop_name}</span> ({offer.quantity_kg} kg)
+                      {tn("Crop: {crop} ({qty} kg)", { crop: <span className="font-bold text-gray-900">{t(offer.crop_name)}</span>, qty: offer.quantity_kg })}
                     </p>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs font-bold text-gray-500 uppercase">Offered Price</div>
-                    <div className="text-2xl font-black text-emerald-700">₹{offer.offered_price_per_kg} / kg</div>
+                    <div className="text-xs font-bold text-gray-500 uppercase">{t("Offered Price")}</div>
+                    <div className="text-2xl font-black text-emerald-700">₹{offer.offered_price_per_kg} {t("/ kg")}</div>
                     <div className="text-xs text-gray-500">
-                      Asking: ₹{offer.asking_price_per_kg} • Total: ₹{(offer.offered_price_per_kg * offer.quantity_kg).toLocaleString()}
+                      {t("Asking: ₹{asking} • Total: ₹{total}", { asking: offer.asking_price_per_kg, total: (offer.offered_price_per_kg * offer.quantity_kg).toLocaleString() })}
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white p-3 rounded-xl border border-gray-200 text-xs text-gray-700 flex justify-between items-center flex-wrap gap-2">
                   <div>
-                    <span className="font-bold text-gray-900">Terms: </span>
+                    <span className="font-bold text-gray-900">{t("Terms:")} </span>
                     <span>{offer.terms}</span>
                   </div>
                   <div className="text-emerald-800 font-black flex items-center gap-1">
-                    <span>🔒 Escrow: {offer.escrow_status}</span>
+                    <span>{t("🔒 Escrow: {status}", { status: tStatus(t, offer.escrow_status) })}</span>
                   </div>
                 </div>
 
@@ -623,18 +630,18 @@ export default function FarmerDashboard() {
                         }}
                         className="bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 font-bold px-4 py-2 rounded-xl text-xs transition"
                       >
-                        Submit Counter-Offer
+                        {t("Submit Counter-Offer")}
                       </button>
                       <button
                         onClick={() => handleAcceptOffer(offer.id)}
                         className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-5 py-2 rounded-xl text-xs shadow-md transition"
                       >
-                        ✓ Accept & Lock Escrow
+                        {t("✓ Accept & Lock Escrow")}
                       </button>
                     </>
                   ) : (
                     <div className="text-xs font-black text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl">
-                      ✓ Deal Confirmed • Payment Locked in Escrow
+                      {t("✓ Deal Confirmed • Payment Locked in Escrow")}
                     </div>
                   )}
                 </div>
@@ -647,11 +654,11 @@ export default function FarmerDashboard() {
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
               <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
                 <h3 className="text-lg font-black text-gray-900">
-                  Submit Counter-Offer to {activeOfferForCounter.buyer_name}
+                  {t("Submit Counter-Offer to {buyer}", { buyer: activeOfferForCounter.buyer_name })}
                 </h3>
                 <form onSubmit={handleCounterOffer} className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-bold text-gray-700 mb-1">Your Counter Price (₹/kg)</label>
+                    <label className="block font-bold text-gray-700 mb-1">{t("Your Counter Price (₹/kg)")}</label>
                     <input
                       type="number"
                       step="0.25"
@@ -667,13 +674,13 @@ export default function FarmerDashboard() {
                       onClick={() => setActiveOfferForCounter(null)}
                       className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-4 py-2 rounded-xl"
                     >
-                      Cancel
+                      {t("Cancel")}
                     </button>
                     <button
                       type="submit"
                       className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-5 py-2 rounded-xl shadow"
                     >
-                      Send Counter-Offer
+                      {t("Send Counter-Offer")}
                     </button>
                   </div>
                 </form>

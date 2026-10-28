@@ -1,47 +1,47 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { askAgent, askAgentVoice, speakText } from "../api/client.js";
+import { askAgent, speakText, transcribeVoice } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAssistant } from "../context/AssistantContext.jsx";
-import { blobToWavBase64, base64ToObjectUrl } from "../utils/audioEncoding.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useGeolocation } from "../hooks/useGeolocation.js";
+import { base64ToObjectUrl, createPcmRecorder } from "../utils/audioEncoding.js";
+import { T } from "../i18n/mark.js";
+import { ChatIcon, CloseIcon, MicIcon, SendIcon, SparkleIcon, SpeakerIcon, StopIcon } from "./icons.jsx";
+import "../styles/assistant.css";
 
 const micSupported =
-  typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== "undefined";
+  typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia
+  && !!(window.AudioContext || window.webkitAudioContext);
 
-const ENGLISH_PROMPTS = [
-  "🌾 Should I sell wheat today or store it in Ujjain?",
-  "📍 Compare prices across nearby mandis for Onion",
-  "🏬 Find WDRA cold storages near Indore",
-  "💰 How much loan can I get for 50 quintals wheat?",
-  "🔍 What is Grade A moisture specification?",
-  "📈 What is the 30-day price trend for Potato?",
-  "🤝 How to pool produce with an FPO for corporate buyers?",
+// Shown in the chosen language (see `t(prompt)` below); the question sent is that same text.
+const PROMPTS = [
+  T("🌾 Should I sell wheat today or store it in Ujjain?"),
+  T("📍 Compare prices across nearby mandis for Onion"),
+  T("🏬 Find WDRA cold storages near Indore"),
+  T("💰 How much loan can I get for 50 quintals wheat?"),
+  T("🔍 What is Grade A moisture specification?"),
+  T("📈 What is the 30-day price trend for Potato?"),
+  T("🤝 How to pool produce with an FPO for corporate buyers?"),
 ];
 
-const HINDI_PROMPTS = [
-  "🌾 क्या मुझे आज उज्जैन में गेहूं बेचना चाहिए या स्टोर करना चाहिए?",
-  "📍 प्याज के लिए नजदीकी मंडियों के भाव की तुलना करें",
-  "🏬 इंदौर के पास प्रमाणित कोल्ड स्टोरेज खोजें",
-  "💰 50 क्विंटल गेहूं पर मुझे कितना गिरवी ऋण मिल सकता है?",
-  "🔍 ग्रेड ए गेहूं के लिए नमी के क्या मानक हैं?",
-  "📈 आलू के लिए अगले 30 दिनों का मूल्य पूर्वानुमान क्या है?",
-  "🤝 कॉर्पोरेट खरीदारों के लिए एफपीओ पूलिंग कैसे काम करती है?",
-];
+const GREETING = T("Namaste! I am your KisanSetu market advisor. Ask me anything about crop prices, whether to sell or store, finding nearby cold storage, or connecting with buyers.");
 
 export default function AgentAssistantModal({ isOpen, onClose }) {
   const { lang, t, currentLanguage } = useLanguage();
   const { initialMode, seedContext } = useAssistant();
+  const { profile } = useAuth();
+  const geo = useGeolocation();
 
   const [mode, setMode] = useState("voice"); // "voice" | "text"
   const [query, setQuery] = useState("");
-  const [messages, setMessages] = useState([{ sender: "agent", text: t("assistant.greeting") }]);
+  const [messages, setMessages] = useState([{ sender: "agent", i18n: GREETING }]);
   const [loading, setLoading] = useState(false);
 
   // Voice state
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const pcmRecorderRef = useRef(null);
   const audioElRef = useRef(null);
   const objectUrlRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -49,15 +49,46 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
   useEffect(() => {
     if (isOpen) {
       setMode(initialMode === "text" || !micSupported ? "text" : "voice");
-      setMessages([{ sender: "agent", text: t("assistant.greeting") }]);
+      setMessages([{ sender: "agent", i18n: GREETING }]);
     } else {
-      mediaRecorderRef.current?.stream?.getTracks().forEach((track) => track.stop());
       audioElRef.current?.pause();
       setIsRecording(false);
       setIsSpeaking(false);
       setLiveTranscript("");
     }
   }, [isOpen]);
+
+  // Keep the microphone "warm" for the whole time voice mode is showing, instead of
+  // requesting it fresh on every mic-button press. getUserMedia is async and can take
+  // a real moment (permission/device arbitration) — re-requesting it per recording
+  // meant a farmer speaking the instant they tapped the button lost everything before
+  // the pipeline finished wiring up, often leaving only the last word captured.
+  useEffect(() => {
+    if (!isOpen || mode !== "voice" || !micSupported) return;
+    let cancelled = false;
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        // If the mic button was already pressed before this resolved, startRecording's
+        // own fallback already created (and may already be recording on) a recorder —
+        // don't clobber it, or a stop() later would land on the wrong instance and
+        // silently drop whatever was just captured.
+        if (cancelled || pcmRecorderRef.current) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        pcmRecorderRef.current = createPcmRecorder(stream);
+      })
+      .catch(() => {
+        // Permission denied or no device — startRecording's own getUserMedia call
+        // will surface the same error to the farmer when they actually press record.
+      });
+    return () => {
+      cancelled = true;
+      pcmRecorderRef.current?.close?.();
+      pcmRecorderRef.current = null;
+    };
+  }, [isOpen, mode, micSupported]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,14 +104,14 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
     () => ({
       crop_name: seedContext?.crop_name || "wheat",
       quantity_kg: seedContext?.quantity_kg || 500,
-      district: seedContext?.district || "Ujjain",
+      district: seedContext?.district || profile?.district || geo.district || "Central",
+      state: seedContext?.state || profile?.state || geo.state || "",
     }),
-    [seedContext]
+    [seedContext, profile?.district, profile?.state, geo.district, geo.state]
   );
 
-  const activePrompts = lang === "hi" || lang === "mr" || lang === "gu" || lang === "pa" || lang === "bn"
-    ? HINDI_PROMPTS
-    : ENGLISH_PROMPTS;
+  // Static messages are kept as keys so they follow the language if it changes while open.
+  const messageText = (m) => (m?.i18n ? t(m.i18n) : m?.text);
 
   if (!isOpen) return null;
 
@@ -108,9 +139,12 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
     try {
       const { audio_base64 } = await speakText({ text, language: lang });
       playAudio(audio_base64);
-    } catch {
-      // Voice playback is a nice-to-have on top of the text reply — a TTS failure
-      // shouldn't block the conversation, so it's silently skipped.
+    } catch (error) {
+      console.error("[KisanSetu] BHASHINI speech playback failed:", error);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "agent", i18n: T("The answer is ready, but voice playback is unavailable right now.") },
+      ]);
     }
   };
 
@@ -120,11 +154,11 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
     setLoading(true);
     try {
       const res = await askAgent({ text, language: lang, ...context });
-      const replyText = res.answer || res.response || "KisanSetu recommendation generated.";
+      const replyText = res.answer || res.response || t("KisanSetu recommendation generated.");
       setMessages((prev) => [...prev, { sender: "agent", text: replyText }]);
       if (speakReply) speakViaBhashini(replyText);
     } catch (err) {
-      const fallback = err.response?.data?.detail || t("common.backendError");
+      const fallback = err.response?.data?.detail || t("Could not reach the KisanSetu backend. Ensure FastAPI is running on http://localhost:8000.");
       setMessages((prev) => [...prev, { sender: "agent", text: fallback }]);
       if (speakReply) speakViaBhashini(fallback);
     } finally {
@@ -144,39 +178,45 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
     stopSpeaking();
     setLiveTranscript("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        setIsRecording(false);
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType });
-        await sendVoiceQuery(blob);
-      };
-      mediaRecorderRef.current = recorder;
-      recorder.start();
+      if (!pcmRecorderRef.current) {
+        // The warm mic from the voice-mode effect isn't ready yet (e.g. the button
+        // was pressed the instant voice mode opened) — fall back to acquiring it now.
+        // This still has the original startup latency, but only in that edge case.
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        pcmRecorderRef.current = createPcmRecorder(stream);
+      }
+      pcmRecorderRef.current.startCapture();
       setIsRecording(true);
     } catch {
-      setMessages((prev) => [...prev, { sender: "agent", text: "Microphone access was denied. Allow microphone permission to use voice mode." }]);
+      setMessages((prev) => [...prev, { sender: "agent", i18n: T("Microphone access was denied. Allow microphone permission to use voice mode.") }]);
     }
   };
 
-  const sendVoiceQuery = async (blob) => {
+  const sendVoiceQuery = async (audio_base64) => {
     setLoading(true);
-    setLiveTranscript(t("assistant.thinking"));
+    setLiveTranscript(t("Interpreting your voice..."));
     try {
-      const audio_base64 = await blobToWavBase64(blob);
-      const res = await askAgentVoice({ audio_base64, language: lang, ...context });
+      // Keep transcription separate from the slower answer/TTS pipeline so the
+      // farmer sees what was understood as soon as BHASHINI finishes ASR.
+      const { transcript } = await transcribeVoice({ audio_base64, language: lang, ...context });
+      const interpretedText = transcript?.trim();
+      if (!interpretedText) throw new Error(t("No speech was detected. Please try again."));
+
       setLiveTranscript("");
-      if (res.transcript) setMessages((prev) => [...prev, { sender: "user", text: res.transcript }]);
-      setMessages((prev) => [...prev, { sender: "agent", text: res.answer_text }]);
-      playAudio(res.answer_audio_base64);
+      setMessages((prev) => [...prev, { sender: "user", text: interpretedText }]);
+
+      const res = await askAgent({ text: interpretedText, language: lang, ...context });
+      const replyText = res.answer || res.response || t("KisanSetu recommendation generated.");
+      setMessages((prev) => [...prev, { sender: "agent", text: replyText }]);
+
+      // Do not hold the visible answer behind Bhashini TTS generation.
+      void speakViaBhashini(replyText);
     } catch (err) {
       setLiveTranscript("");
-      const fallback = err.response?.data?.detail || t("common.backendError");
+      const fallback = err.response?.data?.detail
+        || (err.request && !err.response
+          ? t("Cannot reach {url}. Check that FastAPI is running and reload this page.", { url: import.meta.env.VITE_API_BASE_URL || "http://localhost:8000" })
+          : t("Voice request failed: {reason}", { reason: err.message || t("Could not reach the KisanSetu backend. Ensure FastAPI is running on http://localhost:8000.") }));
       setMessages((prev) => [...prev, { sender: "agent", text: fallback }]);
     } finally {
       setLoading(false);
@@ -185,188 +225,124 @@ export default function AgentAssistantModal({ isOpen, onClose }) {
 
   const handleMicPress = () => {
     if (isRecording) {
-      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+      try {
+        const audioBase64 = pcmRecorderRef.current.stopCapture();
+        sendVoiceQuery(audioBase64);
+      } catch (err) {
+        setMessages((prev) => [...prev, { sender: "agent", text: t("Microphone error: {reason}", { reason: err.message }) }]);
+        setLoading(false);
+      }
       return;
     }
     startRecording();
   };
 
+  const plain = (label) => label.replace(/^[^\p{L}\p{N}]+/u, "");
+  const lastReply = messageText(messages[messages.length - 1]);
+  const orbState = isRecording ? "listening" : loading ? "thinking" : isSpeaking ? "speaking" : "idle";
+  const statusText = isRecording
+    ? t("Listening to your voice…")
+    : loading
+      ? t("Analyzing Agricultural Datasets…")
+      : isSpeaking
+        ? t("Speaking response…")
+        : t("Tap microphone to speak");
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
-      <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-emerald-500/40 flex flex-col h-[600px] overflow-hidden">
-        {/* Clean Header */}
-        <div className="bg-gradient-to-r from-emerald-950 to-teal-900 text-white p-4 flex items-center justify-between shadow shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center text-xl font-black shadow">
-              🎙️
-            </div>
-            <div>
-              <h3 className="font-black text-base leading-tight">{t("assistant.title")}</h3>
-              <p className="text-[11px] text-emerald-200">
-                {currentLanguage.flagLabel} Voice Advisor
-              </p>
-            </div>
+    <div className="va-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="va-panel" role="dialog" aria-modal="true" aria-label={t("KisanSetu Voice & Text Assistant")}>
+        <header className="va-header">
+          <span className={`va-avatar ${orbState}`} aria-hidden="true"><MicIcon size={18} /></span>
+          <div className="va-title">
+            <h3>{t("KisanSetu Voice & Text Assistant")}</h3>
+            <p><span className="va-live-dot" />{currentLanguage.flagLabel} · {t("Voice Advisor")}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="text-white/70 hover:text-white text-2xl font-bold w-8 h-8 rounded-full flex items-center justify-center hover:bg-emerald-800 transition cursor-pointer"
-          >
-            ×
+          <button type="button" className="va-close" onClick={onClose} aria-label={t("Close")}><CloseIcon size={18} /></button>
+        </header>
+
+        <div className="va-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={mode === "voice"} className={mode === "voice" ? "active" : ""} onClick={() => setMode("voice")}>
+            <MicIcon size={15} /> {plain(t("🎙️ Voice Assistant"))}
+          </button>
+          <button type="button" role="tab" aria-selected={mode === "text"} className={mode === "text" ? "active" : ""} onClick={() => setMode("text")}>
+            <ChatIcon size={15} /> {plain(t("💬 Text Chat"))}
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex bg-emerald-50/70 border-b p-1 gap-1 shrink-0">
-          <button
-            onClick={() => setMode("voice")}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              mode === "voice" ? "bg-emerald-600 text-white shadow" : "text-gray-600 hover:bg-emerald-100"
-            }`}
-          >
-            {t("assistant.voiceTab")}
-          </button>
-          <button
-            onClick={() => setMode("text")}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-black transition cursor-pointer ${
-              mode === "text" ? "bg-emerald-600 text-white shadow" : "text-gray-600 hover:bg-emerald-100"
-            }`}
-          >
-            {t("assistant.textTab")}
-          </button>
-        </div>
-
-        {/* Voice Mode View */}
         {mode === "voice" && (
-          <div className="flex-1 flex flex-col justify-between p-5 bg-gradient-to-b from-white to-emerald-50/40 overflow-y-auto">
-            <div className="space-y-3">
-              <div className="bg-white p-4 rounded-2xl border border-emerald-200/80 shadow-sm text-xs space-y-2">
-                <div className="text-[10px] font-black text-gray-500 uppercase">Advisory Response:</div>
-                <div className="text-gray-900 font-semibold leading-relaxed whitespace-pre-line">
-                  {messages[messages.length - 1]?.text}
-                </div>
-              </div>
+          <div className="va-voice">
+            <section className="va-answer">
+              <span className="va-answer-label"><SparkleIcon size={13} /> {plain(t("Advisory Response:"))}</span>
+              <p>{lastReply}</p>
+            </section>
 
-              {isSpeaking && (
-                <div className="flex justify-between items-center bg-emerald-100 text-emerald-900 p-2.5 rounded-xl border border-emerald-300 text-xs">
-                  <div className="flex items-center gap-2 font-bold">
-                    <span className="animate-spin">🔊</span>
-                    <span>{t("assistant.speaking")}</span>
-                  </div>
-                  <button
-                    onClick={stopSpeaking}
-                    className="bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg cursor-pointer"
-                  >
-                    {t("assistant.stopSpeaking")}
-                  </button>
-                </div>
-              )}
+            {!micSupported && <div className="va-note">{t("Microphone recording isn't supported in this browser — use the Text tab instead.")}</div>}
+            {liveTranscript && <div className="va-note"><MicIcon size={14} /> {liveTranscript}</div>}
 
-              {!micSupported && (
-                <div className="bg-amber-50 border border-amber-300 text-amber-900 p-2.5 rounded-xl text-xs font-semibold">
-                  Microphone recording isn't supported in this browser — use the Text tab instead.
-                </div>
-              )}
-
-              {liveTranscript && (
-                <div className="bg-amber-50 border border-amber-300 text-amber-900 p-2.5 rounded-xl text-xs font-semibold">
-                  🎙️ {liveTranscript}
-                </div>
-              )}
-            </div>
-
-            {/* Pulsating Center Mic Button */}
-            <div className="flex flex-col items-center justify-center my-4 space-y-2">
+            <div className="va-stage">
               <button
+                type="button"
                 onClick={handleMicPress}
                 disabled={!micSupported || loading}
-                className={`relative w-20 h-20 rounded-full flex items-center justify-center text-3xl shadow-2xl transition transform hover:scale-105 cursor-pointer disabled:opacity-50 ${
-                  isRecording
-                    ? "bg-rose-500 text-white animate-pulse ring-8 ring-rose-200"
-                    : "bg-emerald-600 text-white hover:bg-emerald-500 ring-8 ring-emerald-100"
-                }`}
+                className={`va-orb ${orbState}`}
+                aria-label={statusText}
               >
-                {isRecording ? "🛑" : "🎙️"}
+                <span className="va-ring r1" /><span className="va-ring r2" /><span className="va-ring r3" />
+                <span className="va-orb-core">{isRecording ? <StopIcon size={30} /> : <MicIcon size={32} />}</span>
               </button>
-              <div className="text-xs font-black text-gray-700">
-                {isRecording ? t("assistant.listening") : loading ? t("assistant.thinking") : t("assistant.tapToSpeak")}
+              <div className={`va-bars ${orbState}`} aria-hidden="true">
+                {Array.from({ length: 13 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 7) * 0.09}s` }} />)}
               </div>
+              <div className="va-status">{statusText}</div>
+              {isSpeaking && (
+                <button type="button" className="va-stop" onClick={stopSpeaking}><SpeakerIcon size={14} /> {t("Stop Speaking")}</button>
+              )}
             </div>
 
-            {/* Quick Prompt Chips */}
-            <div className="space-y-1.5 pt-2 border-t border-emerald-100">
-              <div className="text-[10px] font-bold text-gray-500 uppercase">Suggested Inquiries:</div>
-              <div className="flex gap-1.5 flex-wrap max-h-24 overflow-y-auto">
-                {activePrompts.slice(0, 4).map((prompt, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => sendQuery(prompt, { speakReply: true })}
-                    className="text-[11px] bg-white border border-emerald-300 text-emerald-900 hover:bg-emerald-50 px-2.5 py-1 rounded-xl font-semibold transition cursor-pointer shadow-xs"
-                  >
-                    {prompt}
-                  </button>
+            <div className="va-suggest">
+              <span>{plain(t("Suggested Inquiries:"))}</span>
+              <div className="va-chips">
+                {PROMPTS.slice(0, 4).map((prompt, idx) => (
+                  <button type="button" key={idx} onClick={() => sendQuery(t(prompt), { speakReply: true })}>{t(prompt)}</button>
                 ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* Text Mode View */}
         {mode === "text" && (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs">
+          <div className="va-chat">
+            <div className="va-messages">
               {messages.map((m, idx) => (
-                <div
-                  key={idx}
-                  className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[85%] p-3.5 rounded-2xl leading-relaxed whitespace-pre-line ${
-                      m.sender === "user"
-                        ? "bg-emerald-600 text-white font-semibold rounded-br-none shadow"
-                        : "bg-gray-100 text-gray-900 rounded-bl-none border border-gray-200"
-                    }`}
-                  >
-                    {m.text}
-                  </div>
+                <div key={idx} className={`va-msg ${m.sender === "user" ? "user" : "agent"}`}>
+                  {m.sender !== "user" && <span className="va-msg-avatar" aria-hidden="true"><SparkleIcon size={13} /></span>}
+                  <div className="va-bubble">{messageText(m)}</div>
                 </div>
               ))}
               {loading && (
-                <div className="text-xs text-gray-400 italic flex items-center gap-1.5">
-                  <span className="animate-spin">⏳</span> {t("assistant.thinking")}
+                <div className="va-msg agent">
+                  <span className="va-msg-avatar" aria-hidden="true"><SparkleIcon size={13} /></span>
+                  <div className="va-bubble va-typing"><i /><i /><i /><em>{t("Analyzing Agricultural Datasets…")}</em></div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Prompt Chips */}
-            <div className="px-3 py-2 border-t bg-gray-50 flex gap-1.5 overflow-x-auto text-[11px]">
-              {activePrompts.map((prompt, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => sendQuery(prompt, { speakReply: false })}
-                  className="bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 px-2.5 py-1 rounded-xl whitespace-nowrap font-medium cursor-pointer"
-                >
-                  {prompt}
-                </button>
+            <div className="va-chips scroll">
+              {PROMPTS.map((prompt, idx) => (
+                <button type="button" key={idx} onClick={() => sendQuery(t(prompt), { speakReply: false })}>{t(prompt)}</button>
               ))}
             </div>
 
-            {/* Text Input Footer */}
-            <form onSubmit={handleTextSend} className="p-3 border-t bg-white flex gap-2">
+            <form onSubmit={handleTextSend} className="va-compose">
               <input
                 type="text"
-                placeholder={t("assistant.typePlaceholder")}
+                placeholder={t("Ask about sell timing, prices, cold storage, or buyers…")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="flex-1 border border-gray-300 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
-              <button
-                type="submit"
-                disabled={loading || !query.trim()}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-4 py-2 rounded-xl text-xs shadow transition disabled:opacity-60 cursor-pointer"
-              >
-                {t("assistant.send")}
-              </button>
+              <button type="submit" disabled={loading || !query.trim()} aria-label={t("Send")}><SendIcon size={18} /></button>
             </form>
           </div>
         )}

@@ -5,7 +5,7 @@ Directly addresses Problem Statement: "storage options ... distress selling due 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from app.services.logistics_service import calculate_logistics
+from app.services.logistics_service import calculate_logistics_live
 from app.services.storage_service import evaluate_storage_option
 
 router = APIRouter(prefix="/logistics", tags=["logistics"])
@@ -145,9 +145,13 @@ def calculate_pledge_loan(req: PledgeLoanRequest):
 
 
 @router.post("/calculate-transport")
-def get_transport_estimation(req: LogisticsRequest):
-    """Calculate transport distance, freight charges per kg, and delivery timeframe."""
-    return calculate_logistics(
+async def get_transport_estimation(req: LogisticsRequest):
+    """Calculate transport distance, freight charges per kg, and delivery timeframe
+    using OpenRouteService's real road-routing (geocodes both places, then fetches
+    the actual freight-truck route between them). Falls back to a straight-line
+    estimate — reported via `data_source` — only if OpenRouteService can't resolve
+    the route."""
+    return await calculate_logistics_live(
         origin=req.origin_district,
         destination=req.destination_district,
         quantity_kg=req.quantity_kg,

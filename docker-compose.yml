@@ -1,5 +1,5 @@
 # Optional local infra — the app runs fine on the default SQLite DB with no Docker at
-# all. Use this only if you want Postgres/PostGIS + Redis locally instead. Auth is
+# all. Use this only if you want Postgres locally instead. Auth is
 # Firebase (see backend/.env.example), not part of this compose file.
 services:
   postgres:
@@ -13,12 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
 
 volumes:
   postgres_data:

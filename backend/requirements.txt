@@ -2,15 +2,15 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 websockets==13.1
-pydantic==2.9.2
+pydantic>=2.12.5,<3.0.0
 pydantic-settings==2.5.2
 
 # --- Database ---
 sqlalchemy==2.0.35
-psycopg2-binary==2.9.9
+psycopg2-binary>=2.9.10
+# Firebase SQL Connect (Data Connect) Cloud SQL instance — see docs/FIREBASE_SQL_CONNECT.md
+cloud-sql-python-connector[pg8000]>=1.12
 alembic==1.13.3
-geoalchemy2==0.15.2      # PostGIS support
-redis==5.0.8
 
 # --- Auth ---
 # Firebase Authentication (email link verification + password, on the frontend) is the
@@ -22,8 +22,10 @@ python-multipart==0.0.9
 # --- AI / ML ---
 pandas==2.2.3
 numpy==1.26.4
-cmdstanpy<1.3.0            # pin required for compatibility with prophet==1.1.6
-prophet==1.1.6
+# Prophet is only needed to retrain price models offline (app/ml/train_price_model.py);
+# the running app forecasts from each crop's price history without it.
+# cmdstanpy<1.3.0
+# prophet==1.1.6
 xgboost==2.1.1
 scikit-learn==1.5.2
 shap==0.46.0
@@ -35,32 +37,12 @@ shap==0.46.0
 # (multi-GB download) so it's kept optional to keep first-time setup fast.
 # ultralytics==8.3.0
 
-# --- Agentic AI ---
-# NOTE: current Gemini models (2.5+/3.x) require "thought_signature" support in
-# function-calling turns that langchain-google-genai==2.0.1 doesn't implement — every
-# tool-calling request fails with "Function call is missing a thought_signature" and
-# silently falls back to the rule-based engine. langchain-google-genai>=4 fixes this,
-# which pulls in langchain-core>=1.0. pip's resolver will warn that langgraph==0.2.34
-# wants langchain-core<0.4 — that warning is stale/overly conservative: this exact
-# combination (langgraph 0.2.34 + langchain-core 1.6.2 + langchain-google-genai 4.4.0)
-# is verified working end-to-end against the live Gemini API as of 2026-09. Do NOT add
-# a separate `langgraph-prebuilt` package — 0.2.34 bundles its own.
-langgraph==0.2.34
-langchain-core==1.6.2
-langchain-google-genai==4.4.0
-google-generativeai==0.8.2
-
-# --- Background jobs (optional — not required to run the current MVP; no Celery
-# tasks are wired up yet, all services run synchronously) ---
-celery==5.4.0
+# --- AI assistant ---
+# The assistant calls the Gemini REST API directly with httpx (app/agents/grounded.py),
+# so no LangChain / LangGraph / Google SDK packages are needed.
 
 # --- HTTP clients for external APIs (Agmarknet, e-NAM, Open-Meteo, OpenRouteService, BHASHINI) ---
-httpx==0.27.2
-requests==2.32.3
-
-# --- Payments (optional — routes_transactions.py works without this; only needed
-# if you wire up real Razorpay test-mode checkout) ---
-razorpay==1.4.2
+httpx>=0.28.1,<1.0.0
 
 # --- Dev / test ---
 pytest==8.3.3

@@ -1,0 +1,502 @@
+{
+ "onion": [
+  [
+   "Keralam",
+   "Ettumanoor Market"
+  ],
+  [
+   "Keralam",
+   "Kayamkulam Market"
+  ],
+  [
+   "Himachal Pradesh",
+   "PMY Chamba"
+  ],
+  [
+   "Haryana",
+   "Gohana APMC"
+  ],
+  [
+   "Haryana",
+   "Rewari APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Nanganallur(Uzhavar Sandhai )"
+  ],
+  [
+   "Punjab",
+   "Malout APMC"
+  ],
+  [
+   "Maharashtra",
+   "Pune(Pimpri) "
+  ],
+  [
+   "Maharashtra",
+   "APMC Ramtek "
+  ],
+  [
+   "Gujarat",
+   "Khambhat(Veg Yard Khambhat) APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Usilampatti(Uzhavar Sandhai )"
+  ],
+  [
+   "Maharashtra",
+   "Lasalgaon(Vinchur) "
+  ]
+ ],
+ "wheat": [
+  [
+   "Madhya Pradesh",
+   "Amarpatan APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Alampur APMC"
+  ],
+  [
+   "Maharashtra",
+   "Lasalgaon(Niphad) "
+  ],
+  [
+   "Madhya Pradesh",
+   "Krishi Upaj Mandi Samiti Bichhiya"
+  ],
+  [
+   "West Bengal",
+   "Khatra APMC"
+  ],
+  [
+   "Bihar",
+   "Shekhpura APMC"
+  ],
+  [
+   "Maharashtra",
+   "APMC Sillod "
+  ],
+  [
+   "West Bengal",
+   "Karimpur APMC"
+  ],
+  [
+   "Maharashtra",
+   "Rahuri(Vambori) "
+  ],
+  [
+   "Gujarat",
+   "Dhrol APMC"
+  ],
+  [
+   "Bihar",
+   "Barbigha APMC"
+  ],
+  [
+   "West Bengal",
+   "Bishnupur(Bankura) APMC"
+  ]
+ ],
+ "potato": [
+  [
+   "Keralam",
+   "Kayamkulam Market"
+  ],
+  [
+   "Keralam",
+   "Ettumanoor Market"
+  ],
+  [
+   "Haryana",
+   "Gohana APMC"
+  ],
+  [
+   "Haryana",
+   "Rewari APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Nanganallur(Uzhavar Sandhai )"
+  ],
+  [
+   "Maharashtra",
+   "APMC Ramtek "
+  ],
+  [
+   "Gujarat",
+   "Khambhat(Veg Yard Khambhat) APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Tuticorin(Uzhavar Sandhai )"
+  ],
+  [
+   "Punjab",
+   "Kharar APMC"
+  ],
+  [
+   "Rajasthan",
+   "Sriganganagar (F&V) APMC"
+  ],
+  [
+   "Tripura",
+   "Dasda APMC"
+  ],
+  [
+   "Telangana",
+   "Gudimalkapur APMC"
+  ]
+ ],
+ "tomato": [
+  [
+   "Keralam",
+   "Kayamkulam Market"
+  ],
+  [
+   "Keralam",
+   "Ettumanoor Market"
+  ],
+  [
+   "Telangana",
+   "Shadnagar APMC"
+  ],
+  [
+   "Haryana",
+   "Gohana APMC"
+  ],
+  [
+   "Haryana",
+   "Rewari APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Nanganallur(Uzhavar Sandhai )"
+  ],
+  [
+   "Punjab",
+   "Malout APMC"
+  ],
+  [
+   "Maharashtra",
+   "Pune(Pimpri) "
+  ],
+  [
+   "Maharashtra",
+   "APMC Ramtek "
+  ],
+  [
+   "Gujarat",
+   "Khambhat(Veg Yard Khambhat) APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Usilampatti(Uzhavar Sandhai )"
+  ],
+  [
+   "Maharashtra",
+   "APMC Dharashiv"
+  ]
+ ],
+ "cotton": [
+  [
+   "Madhya Pradesh",
+   "Manawar APMC"
+  ],
+  [
+   "Gujarat",
+   "Sayala APMC"
+  ],
+  [
+   "Gujarat",
+   "Dhrol APMC"
+  ],
+  [
+   "Punjab",
+   "Muktsar APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Gandhwani APMC"
+  ],
+  [
+   "Karnataka",
+   "Vijayapura APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Dhamnod APMC"
+  ],
+  [
+   "Karnataka",
+   "Ranebennur APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Mylavaram APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Cumbum APMC"
+  ],
+  [
+   "Maharashtra",
+   "APMC Bhadrawati "
+  ],
+  [
+   "Rajasthan",
+   "Padampur APMC"
+  ]
+ ],
+ "soybean": [
+  [
+   "Maharashtra",
+   "Lasalgaon(Vinchur) "
+  ],
+  [
+   "Maharashtra",
+   "Lasalgaon(Niphad) "
+  ],
+  [
+   "Madhya Pradesh",
+   "Pachaur APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Shajapur APMC"
+  ],
+  [
+   "Gujarat",
+   "Una APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Badnawar APMC"
+  ],
+  [
+   "Rajasthan",
+   "Anta APMC"
+  ],
+  [
+   "Maharashtra",
+   "Rahuri(Vambori) "
+  ],
+  [
+   "Gujarat",
+   "Dhoraji APMC"
+  ],
+  [
+   "Karnataka",
+   "Bailahongal APMC"
+  ],
+  [
+   "Tamil Nadu",
+   "Dindigul(Uzhavar Sandhai )"
+  ],
+  [
+   "Tamil Nadu",
+   "Paramakudi(Uzhavar Sandhai )"
+  ]
+ ],
+ "maize": [
+  [
+   "Madhya Pradesh",
+   "Kannod APMC"
+  ],
+  [
+   "Karnataka",
+   "Koppal APMC"
+  ],
+  [
+   "Maharashtra",
+   "Lasalgaon(Vinchur) "
+  ],
+  [
+   "Maharashtra",
+   "Lasalgaon(Niphad) "
+  ],
+  [
+   "Madhya Pradesh",
+   "Sagar APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Nandikotkur APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Javera APMC"
+  ],
+  [
+   "Maharashtra",
+   "APMC Sillod "
+  ],
+  [
+   "Andhra Pradesh",
+   "Allagadda APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Mylavaram APMC"
+  ],
+  [
+   "Karnataka",
+   "Ranebennur APMC"
+  ],
+  [
+   "Rajasthan",
+   "Kapasan APMC"
+  ]
+ ],
+ "paddy": [
+  [
+   "Madhya Pradesh",
+   "Sheopurkalan APMC"
+  ],
+  [
+   "Telangana",
+   "Nelakondapally APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Alampur APMC"
+  ],
+  [
+   "Punjab",
+   "Hathur APMC"
+  ],
+  [
+   "Haryana",
+   "Rajound APMC"
+  ],
+  [
+   "Punjab",
+   "Jalandhar City APMC"
+  ],
+  [
+   "Punjab",
+   "Muktsar APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Sevda APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Kothabommali APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Pamarru APMC"
+  ],
+  [
+   "West Bengal",
+   "Khatra APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Yellamanchili APMC"
+  ]
+ ],
+ "rice": [
+  [
+   "West Bengal",
+   "Siliguri APMC"
+  ],
+  [
+   "Uttarakhand",
+   "Gadarpur APMC"
+  ],
+  [
+   "Maharashtra",
+   "APMC Pune "
+  ],
+  [
+   "West Bengal",
+   "Karimpur APMC"
+  ],
+  [
+   "Maharashtra",
+   "APMC Mangaon "
+  ],
+  [
+   "West Bengal",
+   "Baruipur(Canning) APMC"
+  ],
+  [
+   "Maharashtra",
+   "APMC Murud "
+  ],
+  [
+   "Odisha",
+   "Karanjia APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Visakhapatnam APMC"
+  ],
+  [
+   "Andhra Pradesh",
+   "Tiruvuru APMC"
+  ],
+  [
+   "Tripura",
+   "Dasda APMC"
+  ],
+  [
+   "Assam",
+   "Fancy Bazaar APMC"
+  ]
+ ],
+ "mustard": [
+  [
+   "Madhya Pradesh",
+   "Sabalgarh APMC"
+  ],
+  [
+   "Rajasthan",
+   "Jodhpur (Grain) APMC"
+  ],
+  [
+   "Uttar Pradesh",
+   "Khairagarh APMC"
+  ],
+  [
+   "West Bengal",
+   "Guskara APMC"
+  ],
+  [
+   "West Bengal",
+   "Khatra APMC"
+  ],
+  [
+   "Rajasthan",
+   "Padampur APMC"
+  ],
+  [
+   "West Bengal",
+   "Bishnupur(Bankura) APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Mehgaon APMC"
+  ],
+  [
+   "Rajasthan",
+   "Dooni APMC"
+  ],
+  [
+   "Madhya Pradesh",
+   "Biaora APMC"
+  ],
+  [
+   "Gujarat",
+   "Diyodar APMC"
+  ],
+  [
+   "Karnataka",
+   "Bengaluru APMC"
+  ]
+ ]
+}

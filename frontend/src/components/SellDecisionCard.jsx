@@ -1,4 +1,5 @@
 import { useLanguage } from "../context/LanguageContext.jsx";
+import { tServer } from "../i18n/serverText.js";
 
 /**
  * Displays the AI Sell-Decision Engine's full recommendation, including the
@@ -32,22 +33,24 @@ export default function SellDecisionCard({ decision }) {
         .slice(0, 4)
     : [];
   const maxAbsShap = shapEntries.length ? Math.max(...shapEntries.map(([, v]) => Math.abs(v))) : 1;
+  const engineLabel = String(decision.engine || "").startsWith("Rule-based") ? t("Rule-based engine") : decision.engine;
+  const perKg = t("/kg");
 
   return (
     <div className={`rounded-xl border p-5 ${style}`}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-xl font-black flex items-center gap-2">
           <span>{ACTION_EMOJI[decision.action] || "🌾"}</span>
-          {decision.action?.replace("_", " ")}
+          {decision.action ? t(decision.action.replace("_", " ")) : ""}
         </h3>
         <span className="text-sm opacity-75 font-semibold">
-          {t("decision.confidence")}: {Math.round((decision.confidence || 0) * 100)}%
+          {t("Confidence")}: {Math.round((decision.confidence || 0) * 100)}%
         </span>
       </div>
 
       {decision.engine && (
         <div className="text-[11px] font-bold opacity-60 mt-1 uppercase tracking-wide">
-          {t("decision.engineUsed")}: {decision.engine}
+          {t("Engine")}: {engineLabel}
         </div>
       )}
 
@@ -56,7 +59,7 @@ export default function SellDecisionCard({ decision }) {
           {reasons.map((r, i) => (
             <li key={i} className="flex gap-2">
               <span className="opacity-50">•</span>
-              <span>{r}</span>
+              <span>{tServer(t, r)}</span>
             </li>
           ))}
         </ul>
@@ -64,34 +67,34 @@ export default function SellDecisionCard({ decision }) {
 
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm bg-white/50 rounded-lg p-3">
         <div>
-          <div className="opacity-60 text-xs">{t("decision.currentPrice")}</div>
-          <div className="font-bold">₹{decision.current_price_per_kg}/kg</div>
+          <div className="opacity-60 text-xs">{t("Current price")}</div>
+          <div className="font-bold">₹{decision.current_price_per_kg}{perKg}</div>
         </div>
         <div>
-          <div className="opacity-60 text-xs">{t("decision.forecast7d")}</div>
-          <div className="font-bold">₹{decision.predicted_price_per_kg_7d}/kg</div>
+          <div className="opacity-60 text-xs">{t("7-day forecast")}</div>
+          <div className="font-bold">₹{decision.predicted_price_per_kg_7d}{perKg}</div>
         </div>
         <div>
-          <div className="opacity-60 text-xs">{t("decision.netRealization")}</div>
-          <div className="font-bold">₹{decision.net_realization_per_kg}/kg</div>
+          <div className="opacity-60 text-xs">{t("Net realization")}</div>
+          <div className="font-bold">₹{decision.net_realization_per_kg}{perKg}</div>
         </div>
         {decision.demand_level && (
           <div>
-            <div className="opacity-60 text-xs">{t("decision.demand")}</div>
-            <div className="font-bold">{decision.demand_level}</div>
+            <div className="opacity-60 text-xs">{t("Demand")}</div>
+            <div className="font-bold">{tServer(t, decision.demand_level)}</div>
           </div>
         )}
         {decision.weather_condition && (
           <div>
-            <div className="opacity-60 text-xs">{t("decision.weather")}</div>
-            <div className="font-bold">{decision.weather_condition}</div>
+            <div className="opacity-60 text-xs">{t("Weather")}</div>
+            <div className="font-bold">{tServer(t, decision.weather_condition)}</div>
           </div>
         )}
         {decision.logistics?.transport_cost_per_kg !== undefined && (
           <div>
-            <div className="opacity-60 text-xs">{t("decision.logisticsPlan")}</div>
+            <div className="opacity-60 text-xs">{t("Logistics plan")}</div>
             <div className="font-bold">
-              ₹{decision.logistics.transport_cost_per_kg}/kg · {decision.logistics.distance_km} km
+              ₹{decision.logistics.transport_cost_per_kg}{perKg} · {decision.logistics.distance_km} {t("km")}
             </div>
           </div>
         )}
@@ -99,11 +102,11 @@ export default function SellDecisionCard({ decision }) {
 
       {shapEntries.length > 0 && (
         <div className="mt-4 bg-white/50 rounded-lg p-3">
-          <div className="text-xs font-bold opacity-70 mb-2">{t("decision.keyFactors")} (SHAP)</div>
+          <div className="text-xs font-bold opacity-70 mb-2">{t("Key factors (SHAP)")}</div>
           <div className="space-y-1.5">
             {shapEntries.map(([feat, val]) => (
               <div key={feat} className="flex items-center gap-2 text-xs">
-                <span className="w-40 truncate opacity-70">{feat.replace(/_/g, " ")}</span>
+                <span className="w-40 shrink-0 break-words leading-tight opacity-70">{tServer(t, feat.replace(/_/g, " "))}</span>
                 <div className="flex-1 h-2 bg-black/10 rounded-full overflow-hidden">
                   <div
                     className={`h-full ${val >= 0 ? "bg-emerald-600" : "bg-rose-500"}`}

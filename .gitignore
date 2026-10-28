@@ -33,3 +33,9 @@ mobile/**/.dart_tool/
 # OS
 .DS_Store
 *.log
+
+# Firebase / Data Connect local files
+.dataconnect/
+dataconnect/.dataconnect/
+*-debug.log
+.firebase/

@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class FPO(Base):
@@ -24,7 +25,7 @@ class FPO(Base):
     district: Mapped[str] = mapped_column(String, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=True)
     contact_phone: Mapped[str] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     farmers: Mapped[list["Farmer"]] = relationship("Farmer", back_populates="fpo")
     pools: Mapped[list["FPOPool"]] = relationship("FPOPool", back_populates="fpo")
@@ -50,7 +51,7 @@ class FPOPool(Base):
     status: Mapped[str] = mapped_column(String, default="OPEN")  # OPEN, MATCHED, SOLD
     district: Mapped[str] = mapped_column(String, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     fpo: Mapped[FPO] = relationship("FPO", back_populates="pools")
     members: Mapped[list["FPOPoolMember"]] = relationship("FPOPoolMember", back_populates="pool")
@@ -71,7 +72,7 @@ class FPOPoolMember(Base):
         UUID(as_uuid=True), ForeignKey("farmers.id"), nullable=False
     )
     quantity_kg: Mapped[float] = mapped_column(Float, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     pool: Mapped[FPOPool] = relationship("FPOPool", back_populates="members")
     farmer: Mapped["Farmer"] = relationship("Farmer")

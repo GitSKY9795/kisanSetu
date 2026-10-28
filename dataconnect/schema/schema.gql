@@ -1,0 +1,252 @@
+# KisanSetu — Firebase SQL Connect (Data Connect) schema.
+#
+# This is the source of truth for the Cloud SQL (PostgreSQL) database: `firebase deploy
+# --only dataconnect` creates and migrates these tables. The FastAPI backend reads and writes
+# the same tables through SQLAlchemy (backend/app/models), so every table and column name
+# here is pinned with @table / @col to exactly what those models use. Change both together.
+
+# ---------------------------------------------------------------- identity
+"Every signed-in person. Linked to Firebase Authentication by firebaseUid."
+type User @table(name: "users", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  firebaseUid: String! @unique @col(name: "firebase_uid")
+  email: String @col(name: "email")
+  username: String @unique @col(name: "username")
+  phone: String @col(name: "phone")
+  fullName: String @col(name: "full_name")
+  "FARMER, BUYER, Fpo or ADMIN — null until registration is finished."
+  role: String @col(name: "role", dataType: "varchar(10)")
+  isActive: Boolean @col(name: "is_active")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+# ---------------------------------------------------------------- roles
+type Fpo @table(name: "fpos", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  ownerUser: User! @unique
+  name: String! @col(name: "name")
+  registrationId: String @col(name: "registration_id")
+  district: String @col(name: "district")
+  state: String @col(name: "state")
+  contactPhone: String @col(name: "contact_phone")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type Farmer @table(name: "farmers", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  user: User! @unique
+  name: String! @col(name: "name")
+  phone: String! @unique @col(name: "phone")
+  preferredLanguage: String @col(name: "preferred_language")
+  village: String @col(name: "village")
+  district: String @col(name: "district")
+  state: String @col(name: "state")
+  pinCode: String @col(name: "pin_code")
+  farmerType: String @col(name: "farmer_type")
+  landArea: Float @col(name: "land_area")
+  mainCrops: String @col(name: "main_crops")
+  latitude: Float @col(name: "latitude")
+  longitude: Float @col(name: "longitude")
+  storageCapacityKg: Float @col(name: "storage_capacity_kg")
+  fpo: Fpo
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type Buyer @table(name: "buyers", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  user: User! @unique
+  name: String! @col(name: "name")
+  organization: String @col(name: "organization")
+  buyerCategory: String @col(name: "buyer_category")
+  phone: String! @unique @col(name: "phone")
+  district: String @col(name: "district")
+  state: String @col(name: "state")
+  isVerified: Boolean @col(name: "is_verified")
+  kycDocumentUrl: String @col(name: "kyc_document_url")
+  paymentReliabilityScore: Float @col(name: "payment_reliability_score")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+# ---------------------------------------------------------------- produce & pooling
+type CropListing @table(name: "crop_listings", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  farmer: Farmer!
+  cropName: String! @col(name: "crop_name")
+  variety: String @col(name: "variety")
+  quantityKg: Float! @col(name: "quantity_kg")
+  pricePerKg: Float! @col(name: "price_per_kg")
+  qualityGrade: String @col(name: "quality_grade")
+  district: String @col(name: "district")
+  state: String @col(name: "state")
+  storageAvailableKg: Float @col(name: "storage_available_kg")
+  harvestDate: String @col(name: "harvest_date")
+  "SELL / WAIT / STORE / AGGREGATE from the decision engine"
+  recommendedAction: String @col(name: "recommended_action")
+  confidenceScore: Float @col(name: "confidence_score")
+  "LISTED / MATCHED / SOLD"
+  status: String @col(name: "status")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type FpoPool @table(name: "fpo_pools", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  fpo: Fpo!
+  cropName: String! @col(name: "crop_name")
+  variety: String @col(name: "variety")
+  totalQuantityKg: Float @col(name: "total_quantity_kg")
+  targetQuantityKg: Float @col(name: "target_quantity_kg")
+  targetPricePerKg: Float @col(name: "target_price_per_kg")
+  mandiBenchmarkPricePerKg: Float @col(name: "mandi_benchmark_price_per_kg")
+  "OPEN / MATCHED / SOLD"
+  status: String @col(name: "status")
+  district: String @col(name: "district")
+  state: String @col(name: "state")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type FpoPoolMember @table(name: "fpo_pool_members", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  pool: FpoPool!
+  farmer: Farmer!
+  quantityKg: Float! @col(name: "quantity_kg")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+# ---------------------------------------------------------------- market
+type MarketPrice @table(name: "market_prices", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  cropName: String! @col(name: "crop_name") @index
+  mandiName: String! @col(name: "mandi_name") @index
+  district: String! @col(name: "district")
+  state: String! @col(name: "state")
+  modalPricePerKg: Float! @col(name: "modal_price_per_kg")
+  minPricePerKg: Float @col(name: "min_price_per_kg")
+  maxPricePerKg: Float @col(name: "max_price_per_kg")
+  arrivalsTonnes: Float @col(name: "arrivals_tonnes")
+  priceDate: Timestamp @default(expr: "request.time") @col(name: "price_date") @index
+}
+
+type MarketDemand @table(name: "market_demand", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  cropName: String! @col(name: "crop_name") @index
+  district: String! @col(name: "district")
+  "HIGH / MEDIUM / LOW"
+  demandLevel: String @col(name: "demand_level")
+  volumeIndex: Float @col(name: "volume_index")
+  updatedAt: Timestamp @default(expr: "request.time") @col(name: "updated_at")
+}
+
+type BuyerRequirement @table(name: "buyer_requirements", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  buyer: Buyer!
+  cropName: String! @col(name: "crop_name")
+  quantityKg: Float! @col(name: "quantity_kg")
+  qualityGrade: String @col(name: "quality_grade")
+  targetPricePerKg: Float! @col(name: "target_price_per_kg")
+  district: String! @col(name: "district")
+  "ACTIVE / FULFILLED / CLOSED"
+  status: String @col(name: "status")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type Offer @table(name: "offers", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  buyer: Buyer!
+  cropListing: CropListing
+  fpoPool: FpoPool
+  askingPricePerKg: Float @col(name: "asking_price_per_kg")
+  offeredPricePerKg: Float! @col(name: "offered_price_per_kg")
+  offeredQuantityKg: Float! @col(name: "offered_quantity_kg")
+  terms: String @col(name: "terms")
+  status: String @col(name: "status")
+  escrowStatus: String @col(name: "escrow_status")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+# ---------------------------------------------------------------- trade & disputes
+type Transaction @table(name: "transactions", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  invoiceNo: String! @unique @col(name: "invoice_no")
+  cropListing: CropListing
+  farmer: Farmer!
+  buyer: Buyer!
+  cropName: String! @col(name: "crop_name")
+  qualityGrade: String @col(name: "quality_grade")
+  quantityKg: Float! @col(name: "quantity_kg")
+  agreedPricePerKg: Float! @col(name: "agreed_price_per_kg")
+  transportCost: Float @col(name: "transport_cost")
+  storageCost: Float @col(name: "storage_cost")
+  otherCosts: Float @col(name: "other_costs")
+  netRealizationPerKg: Float @col(name: "net_realization_per_kg")
+  "1-4: funded, dispatched, quality verified, paid out"
+  escrowStage: Int @col(name: "escrow_stage")
+  escrowStageLabel: String @col(name: "escrow_stage_label")
+  paymentStatus: String @col(name: "payment_status")
+  deliveryStatus: String @col(name: "delivery_status")
+  razorpayOrderId: String @col(name: "razorpay_order_id")
+  "ESCROWED / COMPLETED / DISPUTED"
+  status: String @col(name: "status")
+  stage1At: Timestamp @col(name: "stage_1_at")
+  stage2At: Timestamp @col(name: "stage_2_at")
+  stage3At: Timestamp @col(name: "stage_3_at")
+  stage4At: Timestamp @col(name: "stage_4_at")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+  updatedAt: Timestamp @default(expr: "request.time") @col(name: "updated_at")
+}
+
+type Grievance @table(name: "grievances", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  ticketNo: String! @unique @col(name: "ticket_no")
+  transaction: Transaction
+  raisedByUser: User!
+  "FARMER / BUYER"
+  raisedByType: String! @col(name: "raised_by_type")
+  category: String! @col(name: "category")
+  cropName: String @col(name: "crop_name")
+  disputedAmountInr: Float @col(name: "disputed_amount_inr")
+  description: String! @col(name: "description")
+  "UNDER_MEDIATION / RESOLVED"
+  status: String @col(name: "status")
+  resolutionSummary: String @col(name: "resolution_summary")
+  resolvedAt: Timestamp @col(name: "resolved_at")
+  slaDeadline: Timestamp @col(name: "sla_deadline")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+# ---------------------------------------------------------------- quality & logistics
+type QualityReport @table(name: "quality_reports", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  farmer: Farmer!
+  cropName: String! @col(name: "crop_name")
+  imageUrl: String @col(name: "image_url")
+  detectedCrop: String @col(name: "detected_crop")
+  grade: String @col(name: "grade")
+  defectPercentage: Float @col(name: "defect_percentage")
+  confidence: Float @col(name: "confidence")
+  summary: String @col(name: "summary")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type StorageUnit @table(name: "storage_units", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  name: String! @col(name: "name")
+  "COLD_STORAGE / WAREHOUSE"
+  facilityType: String @col(name: "facility_type")
+  district: String! @col(name: "district")
+  state: String! @col(name: "state")
+  capacityKg: Float! @col(name: "capacity_kg")
+  availableKg: Float! @col(name: "available_kg")
+  costPerKgPerDay: Float @col(name: "cost_per_kg_per_day")
+  contactPhone: String @col(name: "contact_phone")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}
+
+type LogisticsRoute @table(name: "logistics_routes", key: "id") {
+  id: UUID! @default(expr: "uuidV4()") @col(name: "id")
+  originDistrict: String! @col(name: "origin_district")
+  destinationDistrict: String! @col(name: "destination_district")
+  distanceKm: Float! @col(name: "distance_km")
+  estimatedCostPerKg: Float! @col(name: "estimated_cost_per_kg")
+  transitHours: Float @col(name: "transit_hours")
+  createdAt: Timestamp @default(expr: "request.time") @col(name: "created_at")
+}

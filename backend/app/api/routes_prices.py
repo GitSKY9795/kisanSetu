@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from app.services.data_ingestion.agmarknet_client import fetch_mandi_prices
+from app.services.data_ingestion.agmarknet_client import fetch_mandi_prices, fetched_at_utc
 from app.services.price_forecast_service import forecast_price
 
 router = APIRouter(prefix="/prices", tags=["prices"])
@@ -58,13 +58,44 @@ MANDI_NETWORK = {
 }
 
 
+@router.get("/summary")
+async def get_price_summary(
+    crops: str = Query(..., description="Comma-separated crop names"),
+    state: str | None = None,
+    district: str | None = None,
+):
+    """Current price for several crops in one call. A crop with no data is reported
+    under `missing` rather than failing the request, so a dashboard can ask for a
+    dozen commodities at once without a stream of 503s for the ones not traded today.
+    (Declared before `/{crop}` so "summary" isn't taken for a crop name.)"""
+    names = [name.strip() for name in crops.split(",") if name.strip()][:12]
+    prices, missing = [], []
+    for name in names:
+        records = await fetch_mandi_prices(name, state=state, district=district, limit=1)
+        if not records:
+            missing.append(name)
+            continue
+        latest = records[0]
+        prices.append({
+            "crop": name,
+            "market": latest.get("market"),
+            "current_price_per_quintal": float(latest.get("modal_price", 0)),
+            "arrival_date": latest.get("arrival_date"),
+            "min_price": latest.get("min_price"),
+            "max_price": latest.get("max_price"),
+            "location_match": latest.get("location_match", True),
+            "is_live": latest.get("is_live", True),
+        })
+    return {"prices": prices, "missing": missing, "fetched_at": fetched_at_utc()}
+
+
 @router.get("/{crop}")
 async def get_current_and_forecast_price(
     crop: str, state: str | None = None, district: str | None = None
 ):
     records = await fetch_mandi_prices(crop, state=state, district=district, limit=1)
     if not records:
-        raise HTTPException(status_code=404, detail=f"No price data found for {crop}")
+        raise HTTPException(status_code=503, detail=f"Live mandi price data is unavailable for {crop}. Try again shortly or check AGMARKNET configuration.")
 
     latest = records[0]
     current_price = float(latest.get("modal_price", 0))
@@ -82,6 +113,10 @@ async def get_current_and_forecast_price(
         "arrival_date": latest.get("arrival_date"),
         "min_price": latest.get("min_price", current_price * 0.92),
         "max_price": latest.get("max_price", current_price * 1.08),
+        "source": "AGMARKNET live feed" if latest.get("is_live", True) else "KisanSetu local historical reference",
+        "location_match": latest.get("location_match", True),
+        "is_live": latest.get("is_live", True),
+        "fetched_at": fetched_at_utc(),
     }
 
 
@@ -97,7 +132,9 @@ async def get_nearby_mandi_arbitrage(
     """
     clean_crop = crop.strip().lower()
     records = await fetch_mandi_prices(clean_crop, limit=1)
-    base_price = float(records[0].get("modal_price", 2400)) if records else 2400.0
+    if not records:
+        raise HTTPException(status_code=503, detail=f"Live mandi price data is unavailable for {crop}.")
+    base_price = float(records[0]["modal_price"])
 
     network = MANDI_NETWORK.get(clean_crop, MANDI_NETWORK["wheat"])
     mandis_ranked = []
@@ -145,18 +182,26 @@ async def get_nearby_mandi_arbitrage(
         "arbitrage_gain_per_quintal": arbitrage_gain_per_quintal,
         "total_arbitrage_gain_inr": round(arbitrage_gain_per_quintal * quantity_quintals, 2),
         "mandis": mandis_ranked,
+        "source": "AGMARKNET live feed" if records[0].get("is_live", True) else "KisanSetu local historical reference",
+        "location_match": records[0].get("location_match", True),
+        "is_live": records[0].get("is_live", True),
+        "fetched_at": fetched_at_utc(),
     }
 
 
 @router.get("/{crop}/forecast-multi-horizon")
-async def get_multi_horizon_forecast(crop: str):
+async def get_multi_horizon_forecast(
+    crop: str, state: str | None = None, district: str | None = None
+):
     """
     Returns multi-horizon price predictions (3d, 7d, 15d, 30d) with confidence intervals
     and arrival volume pressure indicators.
     """
     clean_crop = crop.strip().lower()
-    records = await fetch_mandi_prices(clean_crop, limit=1)
-    current_price = float(records[0].get("modal_price", 2400)) if records else 2400.0
+    records = await fetch_mandi_prices(clean_crop, state=state, district=district, limit=1)
+    if not records:
+        raise HTTPException(status_code=503, detail=f"Live mandi price data is unavailable for {crop}.")
+    current_price = float(records[0]["modal_price"])
 
     p_3d = forecast_price(clean_crop, current_price, horizon_days=3)
     p_7d = forecast_price(clean_crop, current_price, horizon_days=7)
@@ -178,10 +223,23 @@ async def get_multi_horizon_forecast(crop: str):
         "trend_direction": "UPWARD" if p_7d >= current_price else "DOWNWARD",
         "optimal_sell_window": "Hold for 30 Days (Lean Season)" if p_30d > current_price * 1.05 else "Sell within 3-7 Days",
         "horizons": forecasts,
+        "source": "AGMARKNET live feed" if records[0].get("is_live", True) else "KisanSetu local historical reference",
+        "location_match": records[0].get("location_match", True),
+        "is_live": records[0].get("is_live", True),
+        "fetched_at": fetched_at_utc(),
     }
 
 
 @router.get("/{crop}/history")
 async def get_price_history(crop: str, state: str | None = None, district: str | None = None):
     records = await fetch_mandi_prices(crop, state=state, district=district, limit=90)
-    return {"crop": crop, "records": records}
+    if not records:
+        raise HTTPException(status_code=503, detail=f"Live mandi price data is unavailable for {crop}.")
+    return {
+        "crop": crop,
+        "records": records,
+        "source": "AGMARKNET live feed" if records[0].get("is_live", True) else "KisanSetu local historical reference",
+        "location_match": records[0].get("location_match", True),
+        "is_live": records[0].get("is_live", True),
+        "fetched_at": fetched_at_utc(),
+    }

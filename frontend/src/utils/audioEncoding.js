@@ -1,40 +1,20 @@
-// BHASHINI's ASR pipeline expects 16kHz mono WAV/PCM, but MediaRecorder only produces
-// compressed formats (webm/opus, mp4/aac) — browsers can't record raw WAV directly.
-// These helpers decode whatever the browser recorded back into PCM samples (via the
-// Web Audio API, which every browser's own decoder already supports) and re-encode
-// that as a plain 16-bit PCM WAV file, entirely client-side, no library needed.
+// BHASHINI's ASR pipeline expects 16kHz mono WAV/PCM. Capture PCM directly so the
+// browser never has to decode a MediaRecorder-specific WebM/Opus blob.
 
 const TARGET_SAMPLE_RATE = 16000;
 
-async function blobToPcm16k(blob) {
-  const arrayBuffer = await blob.arrayBuffer();
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  const audioCtx = new AudioCtx();
-  try {
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
-    // Downmix to mono
-    const channelCount = decoded.numberOfChannels;
-    const length = decoded.length;
-    const mono = new Float32Array(length);
-    for (let ch = 0; ch < channelCount; ch++) {
-      const data = decoded.getChannelData(ch);
-      for (let i = 0; i < length; i++) mono[i] += data[i] / channelCount;
-    }
-    // Resample to 16kHz (simple linear interpolation — good enough for speech)
-    const ratio = decoded.sampleRate / TARGET_SAMPLE_RATE;
-    const outLength = Math.floor(length / ratio);
-    const resampled = new Float32Array(outLength);
-    for (let i = 0; i < outLength; i++) {
-      const srcIndex = i * ratio;
-      const i0 = Math.floor(srcIndex);
-      const i1 = Math.min(i0 + 1, length - 1);
-      const frac = srcIndex - i0;
-      resampled[i] = mono[i0] * (1 - frac) + mono[i1] * frac;
-    }
-    return resampled;
-  } finally {
-    audioCtx.close();
+function resampleTo16k(samples, sourceRate) {
+  if (sourceRate === TARGET_SAMPLE_RATE) return samples;
+  const ratio = sourceRate / TARGET_SAMPLE_RATE;
+  const output = new Float32Array(Math.floor(samples.length / ratio));
+  for (let i = 0; i < output.length; i++) {
+    const sourceIndex = i * ratio;
+    const lower = Math.floor(sourceIndex);
+    const upper = Math.min(lower + 1, samples.length - 1);
+    const fraction = sourceIndex - lower;
+    output[i] = samples[lower] * (1 - fraction) + samples[upper] * fraction;
   }
+  return output;
 }
 
 function pcmFloatToWav(samples, sampleRate) {
@@ -80,9 +60,75 @@ function arrayBufferToBase64(buffer) {
 /** Converts a recorded audio Blob (any browser-decodable format) into base64-encoded
  * 16kHz mono WAV, ready to send to BHASHINI's ASR pipeline. */
 export async function blobToWavBase64(blob) {
-  const samples = await blobToPcm16k(blob);
-  const wavBuffer = pcmFloatToWav(samples, TARGET_SAMPLE_RATE);
-  return arrayBufferToBase64(wavBuffer);
+  throw new Error("Compressed browser audio is not supported; use the PCM recorder.");
+}
+
+/** Wraps a microphone stream in a codec-independent PCM recorder that stays "warm"
+ * across many start/stop cycles — the mic and AudioContext graph are wired up once
+ * and left live for as long as voice mode is open, instead of being torn down and
+ * re-requested (an async `getUserMedia` call, which can take a real, noticeable
+ * moment for permission/device arbitration) on every single press of the record
+ * button. Re-acquiring the mic per-recording meant a farmer who started talking the
+ * instant they tapped the button was speaking before the pipeline had finished
+ * wiring up — the beginning of their sentence (often everything but the last word)
+ * was never captured, matching the "only captures the last word" symptom exactly.
+ * Call `startCapture()`/`stopCapture()` per utterance, and `close()` once when done
+ * with voice mode entirely (releases the mic and the AudioContext). */
+export function createPcmRecorder(stream) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioContext = new AudioCtx();
+  const source = audioContext.createMediaStreamSource(stream);
+  const processor = audioContext.createScriptProcessor(4096, 1, 1);
+  const silentGain = audioContext.createGain();
+  silentGain.gain.value = 0;
+
+  let chunks = [];
+  let capturing = false;
+
+  processor.onaudioprocess = (event) => {
+    if (!capturing) return;
+    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+  };
+  source.connect(processor);
+  processor.connect(silentGain);
+  silentGain.connect(audioContext.destination);
+
+  return {
+    stream,
+    /** Begins buffering a fresh utterance. Synchronous — the mic/AudioContext graph
+     * is already live, so capture starts on this exact call with no setup delay. */
+    startCapture: () => {
+      chunks = [];
+      capturing = true;
+    },
+    /** Ends the current utterance and returns it as base64-encoded 16kHz mono WAV.
+     * Leaves the mic/AudioContext running so the next `startCapture()` is instant too. */
+    stopCapture: () => {
+      capturing = false;
+      const sourceSampleRate = audioContext.sampleRate;
+      const sampleCount = chunks.reduce((total, chunk) => total + chunk.length, 0);
+      const samples = new Float32Array(sampleCount);
+      let offset = 0;
+      chunks.forEach((chunk) => {
+        samples.set(chunk, offset);
+        offset += chunk.length;
+      });
+      chunks = [];
+      if (samples.length === 0) throw new Error("No microphone audio was captured.");
+      return arrayBufferToBase64(pcmFloatToWav(resampleTo16k(samples, sourceSampleRate), TARGET_SAMPLE_RATE));
+    },
+    /** Releases the microphone and closes the AudioContext entirely. Call this once,
+     * when voice mode is exited or the assistant modal closes — not between
+     * individual recordings. */
+    close: async () => {
+      capturing = false;
+      processor.disconnect();
+      source.disconnect();
+      silentGain.disconnect();
+      stream.getTracks().forEach((track) => track.stop());
+      await audioContext.close();
+    },
+  };
 }
 
 /** Converts a base64-encoded audio payload (e.g. BHASHINI TTS output) into a playable

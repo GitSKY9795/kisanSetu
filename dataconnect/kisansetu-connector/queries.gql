@@ -1,0 +1,37 @@
+# Read-only queries for looking at KisanSetu data from the Firebase console's Data Connect
+# tab (or the Admin SDK). The app itself reads and writes through the FastAPI backend, so these
+# are NO_ACCESS: no browser or mobile client can call them.
+
+query ListUsers @auth(level: NO_ACCESS) {
+  users(orderBy: [{ createdAt: DESC }]) { id firebaseUid email username fullName phone role createdAt }
+}
+
+query ListFarmers @auth(level: NO_ACCESS) {
+  farmers(orderBy: [{ createdAt: DESC }]) {
+    id name phone village district state farmerType landArea mainCrops
+    user { email } fpo { name }
+  }
+}
+
+query ListBuyers @auth(level: NO_ACCESS) {
+  buyers(orderBy: [{ createdAt: DESC }]) { id name organization buyerCategory phone district state isVerified user { email } }
+}
+
+query ListFPOs @auth(level: NO_ACCESS) {
+  fpos { id name registrationId district state contactPhone ownerUser { email } }
+}
+
+query ListCropListings @auth(level: NO_ACCESS) {
+  cropListings(orderBy: [{ createdAt: DESC }]) { id cropName variety quantityKg pricePerKg qualityGrade status farmer { name district } }
+}
+
+query ListTransactions @auth(level: NO_ACCESS) {
+  transactions(orderBy: [{ createdAt: DESC }]) {
+    id invoiceNo cropName quantityKg agreedPricePerKg escrowStage paymentStatus status
+    farmer { name } buyer { name organization }
+  }
+}
+
+query ListGrievances @auth(level: NO_ACCESS) {
+  grievances(orderBy: [{ createdAt: DESC }]) { id ticketNo category status disputedAmountInr raisedByType raisedByUser { email } }
+}

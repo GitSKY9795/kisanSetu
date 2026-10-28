@@ -319,6 +319,7 @@ def recommend_action(
         "current_price_per_kg": current_price_per_kg,
         "predicted_price_per_kg_7d": predicted_price,
         "demand_level": demand.get("demand_level", "Moderate"),
+        "demand_forecast": demand,
         "weather_condition": weather.get("weather_condition", "Clear"),
         "rain_probability_pct": rain_prob,
         "net_realization_per_kg": net_realization,

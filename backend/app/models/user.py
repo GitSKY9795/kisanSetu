@@ -2,11 +2,12 @@ import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import Boolean, DateTime, Enum, String
+from sqlalchemy import Boolean, Enum, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class UserRole(str, PyEnum):
@@ -31,6 +32,6 @@ class User(Base):
     username: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=True)
     phone: Mapped[str] = mapped_column(String, nullable=True)
     full_name: Mapped[str] = mapped_column(String, nullable=True)
-    role: Mapped[UserRole | None] = mapped_column(Enum(UserRole), nullable=True)
+    role: Mapped[UserRole | None] = mapped_column(Enum(UserRole, native_enum=False, length=10), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

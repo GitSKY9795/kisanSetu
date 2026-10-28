@@ -2,16 +2,20 @@ import React, { useEffect, useState } from "react";
 import { listGrievances, getGrievanceStats, createGrievance, resolveGrievance, listTransactions } from "../api/client.js";
 import { useLanguage } from "../context/LanguageContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { T } from "../i18n/mark.js";
+import { tStatus } from "../i18n/serverText.js";
 
 const CATEGORIES = [
-  "Quality Specification Discrepancy",
-  "Weight Shortage",
-  "Payment Delay",
-  "Transit Spoilage",
+  T("Quality Specification Discrepancy"),
+  T("Weight Shortage"),
+  T("Payment Delay"),
+  T("Transit Spoilage"),
 ];
 
+const DEFAULT_RESOLUTION = T("Dispute board verified e-Pramaan certificate. Full disputed amount released to farmer.");
+
 export default function GrievancePortal() {
-  const { t } = useLanguage();
+  const { t, tn } = useLanguage();
   const { role } = useAuth();
   const [grievances, setGrievances] = useState([]);
   const [stats, setStats] = useState(null);
@@ -31,9 +35,7 @@ export default function GrievancePortal() {
 
   // Resolve modal (admin only)
   const [activeTicketToResolve, setActiveTicketToResolve] = useState(null);
-  const [resolutionNotes, setResolutionNotes] = useState(
-    "Dispute board verified e-Pramaan certificate. Full disputed amount released to farmer."
-  );
+  const [resolutionNotes, setResolutionNotes] = useState(DEFAULT_RESOLUTION);
 
   const loadData = () => {
     setLoading(true);
@@ -60,7 +62,7 @@ export default function GrievancePortal() {
       setShowRaiseModal(false);
       loadData();
     } catch (err) {
-      alert(err.response?.data?.detail || "Error submitting grievance ticket");
+      alert(err.response?.data?.detail || t("Error submitting grievance ticket"));
     } finally {
       setSubmitting(false);
     }
@@ -74,7 +76,7 @@ export default function GrievancePortal() {
       setActiveTicketToResolve(null);
       loadData();
     } catch (err) {
-      alert(err.response?.data?.detail || "Error resolving grievance");
+      alert(err.response?.data?.detail || t("Error resolving grievance"));
     }
   };
 
@@ -89,17 +91,17 @@ export default function GrievancePortal() {
       <div className="bg-gradient-to-r from-rose-950 via-slate-900 to-emerald-950 text-white p-6 rounded-2xl shadow-xl flex justify-between items-center flex-wrap gap-4 border border-slate-800">
         <div>
           <span className="bg-rose-400 text-slate-950 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
-            Fair Trade Assurance Board
+            {t("Fair Trade Assurance Board")}
           </span>
-          <h1 className="text-2xl sm:text-3xl font-black mt-2">{t("grievances.title")}</h1>
-          <p className="text-slate-300 text-xs sm:text-sm mt-1">{t("grievances.subtitle")}</p>
+          <h1 className="text-2xl sm:text-3xl font-black mt-2">{t("Dispute & Grievance Redressal Portal")}</h1>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1">{t("Fair, fast-track 48-hour dispute resolution for quality discrepancies, weight disputes, and payment delays.")}</p>
         </div>
         {(role === "FARMER" || role === "BUYER") && (
           <button
             onClick={() => setShowRaiseModal(true)}
             className="bg-rose-500 hover:bg-rose-400 text-white font-black px-5 py-3 rounded-xl text-xs shadow-lg transition"
           >
-            {t("grievances.raiseDispute")}
+            {t("+ Raise New Dispute Ticket")}
           </button>
         )}
       </div>
@@ -108,20 +110,20 @@ export default function GrievancePortal() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-            <div className="text-xs text-gray-500 font-bold uppercase">Total Grievances</div>
+            <div className="text-xs text-gray-500 font-bold uppercase">{t("Total Grievances")}</div>
             <div className="text-2xl font-black text-gray-900 mt-1">{stats.total_grievances}</div>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-            <div className="text-xs text-gray-500 font-bold uppercase">Resolution Rate</div>
+            <div className="text-xs text-gray-500 font-bold uppercase">{t("Resolution Rate")}</div>
             <div className="text-2xl font-black text-emerald-700 mt-1">{stats.resolution_rate_pct}%</div>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-            <div className="text-xs text-gray-500 font-bold uppercase">Average Resolution</div>
-            <div className="text-2xl font-black text-blue-700 mt-1">{stats.avg_resolution_time_hours} Hours</div>
+            <div className="text-xs text-gray-500 font-bold uppercase">{t("Average Resolution")}</div>
+            <div className="text-2xl font-black text-blue-700 mt-1">{t("{hours} Hours", { hours: stats.avg_resolution_time_hours })}</div>
           </div>
           <div className="bg-white p-4 rounded-2xl border border-gray-200 text-center shadow-sm">
-            <div className="text-xs text-gray-500 font-bold uppercase">Escrow Protection</div>
-            <div className="text-2xl font-black text-emerald-800 mt-1">{stats.escrow_protection_guarantee}</div>
+            <div className="text-xs text-gray-500 font-bold uppercase">{t("Escrow Protection")}</div>
+            <div className="text-2xl font-black text-emerald-800 mt-1">{t(stats.escrow_protection_guarantee)}</div>
           </div>
         </div>
       )}
@@ -131,9 +133,9 @@ export default function GrievancePortal() {
         <div className="flex justify-between items-center flex-wrap gap-3 border-b pb-3">
           <div>
             <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
-              <span>⚖️</span> {t("grievances.activeTickets")}
+              <span>⚖️</span> {t("Active Grievance Tickets")}
             </h3>
-            <p className="text-xs text-gray-500">Track mediation milestones and settlement status.</p>
+            <p className="text-xs text-gray-500">{t("Track mediation milestones and settlement status.")}</p>
           </div>
           <div className="flex gap-2">
             {["All", "UNDER_MEDIATION", "RESOLVED"].map((st) => (
@@ -144,13 +146,13 @@ export default function GrievancePortal() {
                   statusFilter === st ? "bg-slate-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
-                {st.replace("_", " ")}
+                {st === "All" ? t("All") : tStatus(t, st)}
               </button>
             ))}
           </div>
         </div>
 
-        {loading && <p className="text-sm text-gray-500">{t("common.loading")}</p>}
+        {loading && <p className="text-sm text-gray-500">{t("Loading…")}</p>}
 
         <div className="space-y-4">
           {filtered.map((grv) => (
@@ -173,18 +175,18 @@ export default function GrievancePortal() {
                           : "bg-amber-400 text-slate-950"
                       }`}
                     >
-                      {grv.status}
+                      {tStatus(t, grv.status)}
                     </span>
                   </div>
-                  <h4 className="text-lg font-black text-gray-900 mt-1">{grv.category}</h4>
+                  <h4 className="text-lg font-black text-gray-900 mt-1">{t(grv.category)}</h4>
                   <p className="text-xs text-gray-600">
-                    Raised by: <span className="font-bold text-gray-900">{grv.raised_by_name}</span> ({grv.raised_by_type})
-                    {grv.against_party && <> against <span className="font-bold text-gray-900">{grv.against_party}</span></>}
+                    {tn("Raised by: {name} ({type})", { name: <span className="font-bold text-gray-900">{grv.raised_by_name}</span>, type: tStatus(t, grv.raised_by_type) })}
+                    {grv.against_party && <> {tn("against {name}", { name: <span className="font-bold text-gray-900">{grv.against_party}</span> })}</>}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <div className="text-xs text-gray-500 font-bold uppercase">Disputed Amount</div>
+                  <div className="text-xs text-gray-500 font-bold uppercase">{t("Disputed Amount")}</div>
                   <div className="text-2xl font-black text-rose-700">
                     ₹{grv.disputed_amount_inr?.toLocaleString()}
                   </div>
@@ -193,12 +195,12 @@ export default function GrievancePortal() {
 
               <div className="bg-white p-3.5 rounded-xl border border-gray-200 text-xs space-y-1.5">
                 <div className="text-gray-800 font-medium">
-                  <span className="font-bold text-gray-900">Summary: </span>
+                  <span className="font-bold text-gray-900">{t("Summary:")} </span>
                   {grv.description}
                 </div>
                 {grv.resolution_summary && (
                   <div className="text-emerald-900 font-bold bg-emerald-50 p-2 rounded-lg border border-emerald-200">
-                    Resolution: {grv.resolution_summary}
+                    {t("Resolution:")} {grv.resolution_summary}
                   </div>
                 )}
               </div>
@@ -206,16 +208,19 @@ export default function GrievancePortal() {
               <div className="flex justify-between items-center pt-2 border-t text-xs">
                 <span className="text-gray-500">
                   {grv.status === "RESOLVED"
-                    ? `Resolved At: ${grv.resolved_at?.slice(0, 10)}`
-                    : `SLA Deadline: ${grv.sla_deadline?.slice(0, 10)}`}
+                    ? t("Resolved At: {date}", { date: grv.resolved_at?.slice(0, 10) })
+                    : t("SLA Deadline: {date}", { date: grv.sla_deadline?.slice(0, 10) })}
                 </span>
 
                 {grv.status !== "RESOLVED" && role === "ADMIN" && (
                   <button
-                    onClick={() => setActiveTicketToResolve(grv)}
+                    onClick={() => {
+                      setResolutionNotes(t(DEFAULT_RESOLUTION));
+                      setActiveTicketToResolve(grv);
+                    }}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-1.5 rounded-xl text-xs transition"
                   >
-                    Mediate & Settle Dispute →
+                    {t("Mediate & Settle Dispute →")}
                   </button>
                 )}
               </div>
@@ -223,7 +228,7 @@ export default function GrievancePortal() {
           ))}
 
           {!loading && filtered.length === 0 && (
-            <p className="text-sm text-gray-500 text-center py-8">No grievance tickets found in this category.</p>
+            <p className="text-sm text-gray-500 text-center py-8">{t("No grievance tickets found in this category.")}</p>
           )}
         </div>
       </div>
@@ -234,28 +239,28 @@ export default function GrievancePortal() {
           <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6 space-y-4 animate-fadeIn">
             <div className="flex justify-between items-start border-b pb-3">
               <div>
-                <h3 className="text-xl font-black text-gray-900">Raise Dispute / Grievance Ticket</h3>
-                <p className="text-xs text-gray-500">Fast-track resolution guaranteed by KisanSetu.</p>
+                <h3 className="text-xl font-black text-gray-900">{t("Raise Dispute / Grievance Ticket")}</h3>
+                <p className="text-xs text-gray-500">{t("Fast-track resolution guaranteed by KisanSetu.")}</p>
               </div>
               <button onClick={() => setShowRaiseModal(false)} className="text-gray-400 hover:text-gray-700 text-2xl font-bold">×</button>
             </div>
 
             {transactions.length === 0 ? (
-              <p className="text-sm text-gray-500">You don't have any transactions to raise a dispute against yet.</p>
+              <p className="text-sm text-gray-500">{t("You don't have any transactions to raise a dispute against yet.")}</p>
             ) : (
               <form onSubmit={handleRaiseGrievance} className="space-y-3.5 text-xs font-semibold">
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Transaction</label>
+                  <label className="block text-gray-700 font-bold mb-1">{t("Transaction")}</label>
                   <select
                     value={form.transaction_id}
                     onChange={(e) => setForm({ ...form, transaction_id: e.target.value })}
                     className="w-full border rounded-xl p-2.5 bg-gray-50 font-bold"
                     required
                   >
-                    <option value="">Select a transaction…</option>
+                    <option value="">{t("Select a transaction…")}</option>
                     {transactions.map((txn) => (
                       <option key={txn.id} value={txn.id}>
-                        {txn.invoice_no} — {txn.crop_name} ({txn.quantity_kg} kg)
+                        {t("{invoice} — {crop} ({qty} kg)", { invoice: txn.invoice_no, crop: t(txn.crop_name), qty: txn.quantity_kg })}
                       </option>
                     ))}
                   </select>
@@ -263,17 +268,17 @@ export default function GrievancePortal() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-gray-700 font-bold mb-1">Dispute Category</label>
+                    <label className="block text-gray-700 font-bold mb-1">{t("Dispute Category")}</label>
                     <select
                       value={form.category}
                       onChange={(e) => setForm({ ...form, category: e.target.value })}
                       className="w-full border rounded-xl p-2.5 bg-gray-50 font-bold"
                     >
-                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{t(c)}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-gray-700 font-bold mb-1">Disputed Amount (₹)</label>
+                    <label className="block text-gray-700 font-bold mb-1">{t("Disputed Amount (₹)")}</label>
                     <input
                       type="number"
                       value={form.disputed_amount_inr}
@@ -285,7 +290,7 @@ export default function GrievancePortal() {
                 </div>
 
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Detailed Description of Issue</label>
+                  <label className="block text-gray-700 font-bold mb-1">{t("Detailed Description of Issue")}</label>
                   <textarea
                     rows={3}
                     value={form.description}
@@ -296,9 +301,9 @@ export default function GrievancePortal() {
                 </div>
 
                 <div className="flex justify-end gap-2 pt-2 border-t">
-                  <button type="button" onClick={() => setShowRaiseModal(false)} className="bg-gray-100 text-gray-700 font-bold px-4 py-2 rounded-xl">Cancel</button>
+                  <button type="button" onClick={() => setShowRaiseModal(false)} className="bg-gray-100 text-gray-700 font-bold px-4 py-2 rounded-xl">{t("Cancel")}</button>
                   <button type="submit" disabled={submitting} className="bg-rose-600 hover:bg-rose-500 text-white font-black px-5 py-2 rounded-xl shadow">
-                    {submitting ? "Submitting Ticket…" : "Submit Dispute"}
+                    {submitting ? t("Submitting Ticket…") : t("Submit Dispute")}
                   </button>
                 </div>
               </form>
@@ -312,11 +317,11 @@ export default function GrievancePortal() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
             <h3 className="text-xl font-black text-gray-900">
-              Mediate & Settle Ticket {activeTicketToResolve.ticket_no}
+              {t("Mediate & Settle Ticket {ticket}", { ticket: activeTicketToResolve.ticket_no })}
             </h3>
             <form onSubmit={handleResolveGrievance} className="space-y-3.5 text-xs font-semibold">
               <div>
-                <label className="block text-gray-700 font-bold mb-1">Mediation Resolution Order</label>
+                <label className="block text-gray-700 font-bold mb-1">{t("Mediation Resolution Order")}</label>
                 <textarea
                   rows={3}
                   value={resolutionNotes}
@@ -326,11 +331,11 @@ export default function GrievancePortal() {
                 />
               </div>
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 text-emerald-900">
-                Settlement Payout: <span className="font-black">₹{activeTicketToResolve.disputed_amount_inr}</span> will be disbursed to {activeTicketToResolve.raised_by_name} via Escrow release.
+                {tn("Settlement Payout: {amount} will be disbursed to {name} via Escrow release.", { amount: <span className="font-black">₹{activeTicketToResolve.disputed_amount_inr}</span>, name: activeTicketToResolve.raised_by_name })}
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setActiveTicketToResolve(null)} className="bg-gray-100 text-gray-700 font-bold px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-5 py-2 rounded-xl shadow">Confirm Settlement</button>
+                <button type="button" onClick={() => setActiveTicketToResolve(null)} className="bg-gray-100 text-gray-700 font-bold px-4 py-2 rounded-xl">{t("Cancel")}</button>
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-black px-5 py-2 rounded-xl shadow">{t("Confirm Settlement")}</button>
               </div>
             </form>
           </div>

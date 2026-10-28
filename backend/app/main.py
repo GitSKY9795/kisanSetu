@@ -17,10 +17,14 @@ from app.api import (
     routes_transactions,
 )
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import IS_POSTGRES, Base, engine
 import app.models  # noqa: F401 — registers every model on Base.metadata before create_all
 
-Base.metadata.create_all(bind=engine)
+# On PostgreSQL (Firebase SQL Connect) the tables are created and migrated by
+# `firebase deploy --only dataconnect` from dataconnect/schema/schema.gql — the backend only
+# uses them. The local SQLite file is still set up automatically.
+if not IS_POSTGRES:
+    Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -50,6 +54,15 @@ app.include_router(routes_logistics.router)
 app.include_router(routes_agent.router)
 app.include_router(routes_transactions.router)
 app.include_router(routes_grievances.router)
+
+
+@app.on_event("startup")
+def keep_mandi_history_current():
+    # Tops up data/agmarknet/ (the demand model's input) with the latest days, in the background.
+    if settings.AGMARKNET_API_KEY:
+        from app.ml.agmarknet_history import start_background_refresh
+
+        start_background_refresh()
 
 
 @app.get("/health", tags=["meta"])

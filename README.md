@@ -41,7 +41,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full system diagram a
 | **Backend** | Python, FastAPI, SQLAlchemy, WebSockets |
 | **Database** | SQLite (local dev default) / PostgreSQL + PostGIS (production) |
 | **AI/ML** | Pandas, NumPy, Prophet, XGBoost, Scikit-learn, YOLOv8, SHAP |
-| **Agentic AI** | LangGraph + Gemini API (tool-calling orchestrator), **BHASHINI** (voice/ASR/NMT/TTS) |
+| **AI assistant** | Gemini API (one grounded request per question, model failover), **BHASHINI** (voice/ASR/NMT/TTS) |
 | **Data / External APIs** | AGMARKNET (data.gov.in), e-NAM, Open-Meteo, OpenRouteService |
 | **Auth** | Firebase Authentication (email link verification + password) — sole identity provider for every role (Farmer/Buyer/FPO/Admin); backend verifies ID tokens via `firebase-admin` |
 | **Payments** | Razorpay (test mode) |
@@ -57,15 +57,12 @@ kisansetu-ai/
 │   └── app/
 │       ├── core/        # config, db session, Firebase auth verification + role guards
 │       ├── models/      # SQLAlchemy models (Farmer, Buyer, Crop, Transaction, FPO)
-│       ├── schemas/      # Pydantic request/response schemas
 │       ├── api/          # route handlers (auth, farmers, buyers, prices, decision, agent, transactions)
 │       ├── services/     # business logic: price forecast, decision engine, net realization,
 │       │                 #   bhashini voice service, data_ingestion/ (Agmarknet, weather, routing)
-│       ├── agents/        # LangGraph agent orchestrator + tool definitions
+│       ├── agents/        # AI assistant: grounded Gemini answers + offline fallback
 │       └── ml/            # training scripts + saved model artifacts
 ├── frontend/            # React + Tailwind web dashboard (farmer/buyer/FPO/admin views)
-├── mobile/              # Flutter app (see mobile/README.md to scaffold)
-├── ml-notebooks/         # exploratory notebooks for price forecasting & decision model
 ├── docs/                 # architecture, API reference, problem statement, team roles
 └── .github/workflows/    # CI pipelines for backend & frontend
 ```
@@ -81,7 +78,7 @@ in `.env` — just point it at your instance.
 - Python 3.11+ (`python3 --version`)
 - Node.js 18+ (`node --version`)
 - [Homebrew](https://brew.sh) (for `libomp`, needed by XGBoost on macOS)
-- Docker is **optional** — only needed if you want local Postgres/Redis instead of SQLite.
+- Docker is **optional** — only needed if you want local Postgres instead of SQLite.
 
 ### 5.1 Clone & configure
 ```bash
@@ -147,6 +144,15 @@ python -m app.ml.train_decision_model     # trains XGBoost sell-decision classif
 python -m app.ml.train_price_model        # trains Prophet per crop (~1–3 min per crop, needs cmdstan installed above)
 ```
 
+Demand model (XGBoost trained on **real AGMARKNET mandi prices**; needs `AGMARKNET_API_KEY`):
+```bash
+python -m app.ml.agmarknet_history        # ~12 regular mandis per crop, up to 2 years of their prices, into backend/data/agmarknet/ (~11 min)
+python -m app.ml.train_demand_model       # trains the 14-day demand model (~10 s) and prints its test scores vs simple baselines
+```
+While the backend runs it tops up `data/agmarknet/` with the latest days every 6 hours
+(`python -m app.ml.agmarknet_history --top-up 21` does the same by hand), so predictions stay
+current; retrain occasionally (e.g. monthly) to learn from the new data.
+
 Start the API:
 ```bash
 uvicorn app.main:app --reload --port 8000
@@ -174,7 +180,6 @@ dashboard (Farmer, Buyer, FPO, Marketplace, Admin, AI Assistant) is live-wired t
 real API calls, not mock data.
 
 ### 5.5 Mobile (Flutter)
-See [`mobile/README.md`](mobile/README.md) — optional, not required to explore the prototype.
 
 ## 6. macOS Troubleshooting
 
@@ -182,7 +187,6 @@ See [`mobile/README.md`](mobile/README.md) — optional, not required to explore
 |---|---|
 | `import xgboost` → `libomp.dylib not found` | `brew install libomp` (see 5.2) |
 | `cmdstanpy` install hangs or fails with a GitHub connection error | Re-run `python -c "import cmdstanpy; cmdstanpy.install_cmdstan()"` — it retries on transient network errors; check you're not on a restrictive network/VPN blocking `github.com` |
-| `pip install -r requirements.txt` fails on `langchain-core` / `langgraph` conflict | Don't add or bump `langgraph-prebuilt` as a separate pin — `langgraph==0.2.34` already bundles its own `langgraph.prebuilt` submodule. Reinstall from this repo's `requirements.txt` as-is. |
 | Training `train_price_model.py` fails / very slow | Make sure `cmdstanpy.install_cmdstan()` finished successfully first (5.3). First fit per crop is slower; subsequent ones are faster. |
 | Frontend pages show "Could not reach the KisanSetu backend" | Make sure `uvicorn` is running on port 8000 in another terminal, and `frontend/.env` has `VITE_API_BASE_URL=http://localhost:8000` |
 | `sqlite3.OperationalError` on a fresh clone | Delete `backend/kisansetu.db` if present and re-run `python -m scripts.seed_data` — SQLite will recreate all tables automatically on first import of `app.core.database` |

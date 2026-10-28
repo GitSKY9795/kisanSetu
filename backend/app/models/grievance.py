@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class Grievance(Base):
@@ -33,11 +34,11 @@ class Grievance(Base):
     status: Mapped[str] = mapped_column(String, default="UNDER_MEDIATION")
     # UNDER_MEDIATION, RESOLVED
     resolution_summary: Mapped[str] = mapped_column(String, nullable=True)
-    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     sla_deadline: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.utcnow() + timedelta(hours=48)
+        UTCDateTime, default=lambda: datetime.utcnow() + timedelta(hours=48)
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     raised_by: Mapped["User"] = relationship("User")  # noqa: F821
     transaction: Mapped["Transaction | None"] = relationship("Transaction")  # noqa: F821

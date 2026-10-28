@@ -5,7 +5,7 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.firebase import verify_firebase_token
+from app.core.firebase import TokenVerificationUnavailable, verify_firebase_token
 from app.models.user import User, UserRole
 
 
@@ -13,7 +13,18 @@ def get_firebase_claims(authorization: str | None = Header(default=None)) -> dic
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing bearer token")
     token = authorization.split(" ", 1)[1].strip()
-    claims = verify_firebase_token(token)
+    try:
+        claims = verify_firebase_token(token)
+    except TokenVerificationUnavailable as exc:
+        # A genuinely bad token and a backend/network outage must not look the same to
+        # the frontend: a 401 here means "sign in again", but an outage previously came
+        # back as a 401 too, which the frontend read as "you haven't registered yet" and
+        # sent already-registered users straight back to the registration form. A 503
+        # tells the frontend to retry instead of resetting the user's session.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not verify your session right now. Please try again in a moment.",
+        ) from exc
     if not claims:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
     return claims

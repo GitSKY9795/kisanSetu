@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class StorageUnit(Base):
@@ -24,7 +25,7 @@ class StorageUnit(Base):
     available_kg: Mapped[float] = mapped_column(Float, nullable=False)
     cost_per_kg_per_day: Mapped[float] = mapped_column(Float, default=0.5)
     contact_phone: Mapped[str] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
 
 class LogisticsRoute(Base):
@@ -40,4 +41,4 @@ class LogisticsRoute(Base):
     distance_km: Mapped[float] = mapped_column(Float, nullable=False)
     estimated_cost_per_kg: Mapped[float] = mapped_column(Float, nullable=False)
     transit_hours: Mapped[float] = mapped_column(Float, default=12.0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

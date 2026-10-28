@@ -120,6 +120,8 @@ def set_username(
     """Sets the account's username — called right after the user links a password to
     their (already email-verified) Firebase account, before role selection."""
     if user.username:
+        if user.username == req.username:
+            return _me_payload(user, db)
         raise HTTPException(status_code=400, detail="Username is already set for this account.")
     if db.query(User).filter(User.username == req.username).first():
         raise HTTPException(status_code=409, detail="That username is already taken.")
@@ -250,6 +252,111 @@ def register_fpo(
     user.full_name = req.name
     user.phone = req.phone
     db.add(fpo)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _me_payload(user, db)
+
+
+PHONE_RE = re.compile(r"^\+91[6-9]\d{9}$")
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Every field optional — only what's sent is changed. Fields that don't apply to the
+    caller's role are rejected rather than silently ignored."""
+
+    name: str | None = None
+    phone: str | None = None
+    village: str | None = None
+    district: str | None = None
+    state: str | None = None
+    pin_code: str | None = None
+    farmer_type: str | None = None
+    land_area: float | None = None
+    main_crops: str | None = None
+    organization: str | None = None
+    buyer_category: str | None = None
+    registration_id: str | None = None
+
+    @field_validator("name", "village", "district", "state", "main_crops", "farmer_type", "buyer_category")
+    @classmethod
+    def not_blank(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("This field can't be empty.")
+        return v.strip() if v is not None else v
+
+    @field_validator("organization", "registration_id")
+    @classmethod
+    def optional_text(cls, v: str | None) -> str | None:
+        return (v.strip() or None) if v is not None else None
+
+    @field_validator("phone")
+    @classmethod
+    def valid_phone(cls, v: str | None) -> str | None:
+        if v is not None and not PHONE_RE.match(v):
+            raise ValueError("Enter a valid 10-digit mobile number.")
+        return v
+
+    @field_validator("pin_code")
+    @classmethod
+    def valid_pin(cls, v: str | None) -> str | None:
+        if v is not None and v.strip() and not re.fullmatch(r"\d{6}", v.strip()):
+            raise ValueError("PIN code must be 6 digits.")
+        return (v.strip() or None) if v is not None else None
+
+    @field_validator("land_area")
+    @classmethod
+    def positive_area(cls, v: float | None) -> float | None:
+        if v is not None and v <= 0:
+            raise ValueError("Land area must be more than zero.")
+        return v
+
+
+# request field -> model attribute, per role
+_EDITABLE = {
+    UserRole.FARMER: {f: f for f in ("name", "phone", "village", "district", "state", "pin_code", "farmer_type", "land_area", "main_crops")},
+    UserRole.BUYER: {f: f for f in ("name", "phone", "organization", "buyer_category", "district", "state")},
+    UserRole.FPO: {"name": "name", "phone": "contact_phone", "registration_id": "registration_id", "district": "district", "state": "state"},
+}
+
+
+@router.patch("/profile")
+def update_profile(
+    req: ProfileUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lets a registered farmer, buyer or FPO edit their own profile."""
+    if user.role not in _EDITABLE:
+        raise HTTPException(status_code=403, detail="This account has no editable profile.")
+    model, owner = {
+        UserRole.FARMER: (Farmer, Farmer.user_id),
+        UserRole.BUYER: (Buyer, Buyer.user_id),
+        UserRole.FPO: (FPO, FPO.owner_user_id),
+    }[user.role]
+    row = db.query(model).filter(owner == user.id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Profile not found. Finish registration first.")
+
+    changes = req.model_dump(exclude_unset=True)
+    allowed = _EDITABLE[user.role]
+    not_allowed = sorted(set(changes) - set(allowed))
+    if not_allowed:
+        raise HTTPException(status_code=422, detail=f"These fields don't apply to your account: {', '.join(not_allowed)}")
+
+    if "phone" in changes and changes["phone"] != user.phone:
+        phone_column = getattr(model, allowed["phone"])
+        taken = db.query(model).filter(phone_column == changes["phone"], owner != user.id).first()
+        if taken:
+            raise HTTPException(status_code=409, detail="This mobile number is already used by another account.")
+
+    for field, value in changes.items():
+        setattr(row, allowed[field], value)
+    if "name" in changes:
+        user.full_name = changes["name"]
+    if "phone" in changes:
+        user.phone = changes["phone"]
+    db.add(row)
     db.add(user)
     db.commit()
     db.refresh(user)

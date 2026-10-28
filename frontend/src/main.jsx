@@ -6,6 +6,7 @@ import { LanguageProvider } from "./context/LanguageContext.jsx";
 import { AssistantProvider } from "./context/AssistantContext.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import "./index.css";
+import "./styles/shell.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

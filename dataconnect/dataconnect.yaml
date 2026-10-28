@@ -1,0 +1,14 @@
+specVersion: "v1"
+serviceId: "kisansetu"
+location: "asia-south1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "kisansetu"
+      cloudSql:
+        instanceId: "kisansetu-fdc"
+      # The FastAPI backend writes to these same tables through SQLAlchemy, so let Data Connect
+      # manage the columns it knows about without rejecting anything else on the tables.
+      schemaValidation: "COMPATIBLE"
+connectorDirs: ["./kisansetu-connector"]

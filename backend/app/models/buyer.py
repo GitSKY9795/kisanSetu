@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class Buyer(Base):
@@ -30,4 +31,4 @@ class Buyer(Base):
     kyc_document_url: Mapped[str] = mapped_column(String, nullable=True)
     payment_reliability_score: Mapped[float] = mapped_column(default=0.0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

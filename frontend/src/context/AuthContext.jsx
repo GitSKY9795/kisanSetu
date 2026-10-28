@@ -11,12 +11,14 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [syncError, setSyncError] = useState(null);
 
   const refresh = useCallback(async () => {
     if (!auth.currentUser) {
       setAccount(null);
       setRole(null);
       setProfile(null);
+      setSyncError(null);
       return null;
     }
     try {
@@ -24,11 +26,25 @@ export function AuthProvider({ children }) {
       setAccount(me.user);
       setRole(me.role);
       setProfile(me.profile);
+      setSyncError(null);
       return me;
-    } catch {
-      setAccount(null);
-      setRole(null);
-      setProfile(null);
+    } catch (error) {
+      const status = error?.response?.status;
+      // Only a genuine 401 (Firebase rejected the token: signed out, revoked, expired
+      // beyond refresh) means "this person isn't authenticated" — clear their role so
+      // routing sends them to log in again. Anything else (backend down, a network
+      // blip, the transient 503 the backend now returns when token verification itself
+      // couldn't run) is not proof the account is unregistered, so their last-known
+      // role/profile is kept and the failure is surfaced instead of silently bouncing
+      // an already-registered user back into the registration flow.
+      if (status === 401) {
+        setAccount(null);
+        setRole(null);
+        setProfile(null);
+        setSyncError(null);
+      } else {
+        setSyncError(error);
+      }
       return null;
     }
   }, []);
@@ -56,7 +72,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ firebaseUser, account, role, profile, loading, refresh, logout }}>
+    <AuthContext.Provider value={{ firebaseUser, account, role, profile, loading, syncError, refresh, logout }}>
       {children}
     </AuthContext.Provider>
   );

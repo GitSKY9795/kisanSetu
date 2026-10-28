@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.types import UTCDateTime
 
 
 class MarketPrice(Base):
@@ -24,7 +25,7 @@ class MarketPrice(Base):
     min_price_per_kg: Mapped[float] = mapped_column(Float, nullable=True)
     max_price_per_kg: Mapped[float] = mapped_column(Float, nullable=True)
     arrivals_tonnes: Mapped[float] = mapped_column(Float, nullable=True)
-    price_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    price_date: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, index=True)
 
 
 class MarketDemand(Base):
@@ -39,7 +40,7 @@ class MarketDemand(Base):
     district: Mapped[str] = mapped_column(String, nullable=False)
     demand_level: Mapped[str] = mapped_column(String, default="MEDIUM")  # HIGH, MEDIUM, LOW
     volume_index: Mapped[float] = mapped_column(Float, default=1.0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
 
 class BuyerRequirement(Base):
@@ -59,7 +60,7 @@ class BuyerRequirement(Base):
     target_price_per_kg: Mapped[float] = mapped_column(Float, nullable=False)
     district: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, default="ACTIVE")  # ACTIVE, FULFILLED, CLOSED
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     buyer: Mapped["Buyer"] = relationship("Buyer")  # noqa: F821
 
@@ -88,7 +89,7 @@ class Offer(Base):
     status: Mapped[str] = mapped_column(String, default="OFFER_SUBMITTED")
     # OFFER_SUBMITTED, COUNTER_OFFERED, ACCEPTED, REJECTED
     escrow_status: Mapped[str] = mapped_column(String, default="ESCROW_PREAUTH_READY")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     buyer: Mapped["Buyer"] = relationship("Buyer")  # noqa: F821
     crop_listing: Mapped["CropListing | None"] = relationship("CropListing")  # noqa: F821
