@@ -17,13 +17,14 @@ from app.api import (
     routes_transactions,
 )
 from app.core.config import settings
-from app.core.database import IS_POSTGRES, Base, engine
+from app.core.database import Base, engine
 import app.models  # noqa: F401 — registers every model on Base.metadata before create_all
 
-# On PostgreSQL (Firebase SQL Connect) the tables are created and migrated by
-# `firebase deploy --only dataconnect` from dataconnect/schema/schema.gql — the backend only
-# uses them. The local SQLite file is still set up automatically.
-if not IS_POSTGRES:
+# Firebase SQL Connect tables are created and migrated by
+# `firebase deploy --only dataconnect` from dataconnect/schema/schema.gql. For ordinary
+# PostgreSQL deployments such as Render, create the SQLAlchemy tables on startup because
+# this project does not ship Alembic revision files.
+if not settings.CLOUD_SQL_INSTANCE:
     Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
