@@ -66,7 +66,7 @@ def keep_mandi_history_current():
         start_background_refresh()
 
 
-@app.get("/health", tags=["meta"])
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["meta"])
 def health():
     return {"status": "ok", "app": settings.APP_NAME, "env": settings.ENV}
 

@@ -11,6 +11,12 @@ def test_health():
     assert resp.json()["status"] == "ok"
 
 
+def test_health_head():
+    resp = client.head("/health")
+    assert resp.status_code == 200
+    assert resp.content == b""
+
+
 def test_root():
     resp = client.get("/")
     assert resp.status_code == 200
